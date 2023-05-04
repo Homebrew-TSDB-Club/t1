@@ -1,0 +1,12 @@
+[package]
+name = "resource"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "1"
+chunk = { path = "../chunk" }
+common = { path = "../common" }
+executor = { path = "../executor" }
+croaring = "0.8"
+hashbrown = "0.13"
