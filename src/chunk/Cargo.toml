@@ -1,0 +1,10 @@
+[package]
+name = "chunk"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+common = { path = "../common" }
+croaring = "0.8"
+hashbrown = "0.13"
+pdatastructs = "0.7"
