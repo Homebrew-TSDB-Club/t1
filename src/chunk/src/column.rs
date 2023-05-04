@@ -33,7 +33,10 @@ pub struct LabelColumn<A: IdentifiedArray> {
     index: Vec<IndexImpl<A::ID>>,
 }
 
-impl<A: IdentifiedArray> PartialEq for LabelColumn<A> {
+impl<A: IdentifiedArray> PartialEq for LabelColumn<A>
+where
+    for<'a> A::ItemRef<'a>: PartialEq,
+{
     fn eq(&self, other: &Self) -> bool {
         self.array.iter().eq(other.array.iter())
     }
@@ -44,7 +47,10 @@ pub struct FieldColumn<A: Array> {
     array: A,
 }
 
-impl<A: Array> PartialEq for FieldColumn<A> {
+impl<A: Array> PartialEq for FieldColumn<A>
+where
+    for<'a> A::ItemRef<'a>: PartialEq,
+{
     fn eq(&self, other: &Self) -> bool {
         self.array.iter().eq(other.array.iter())
     }

@@ -1,9 +1,7 @@
-use std::fmt::Debug;
-
 use super::bitmap::{Bitmap, BitmapRef, BitmapRefMut};
 use crate::primitive::Primitive;
 
-pub trait Scalar: 'static + Clone + Debug + Sized + PartialEq {
+pub trait Scalar: 'static + Clone + Sized {
     type Ref<'a>: ScalarRef<'a>
     where
         Self: 'a;
@@ -14,11 +12,11 @@ pub trait Scalar: 'static + Clone + Debug + Sized + PartialEq {
     fn as_ref(&self) -> Self::Ref<'_>;
 }
 
-pub trait ScalarRef<'a>: Debug + PartialEq + 'a {
+pub trait ScalarRef<'a> {
     type Owned: Scalar;
 }
 
-pub trait ScalarRefMut<'a>: Debug + PartialEq + 'a {
+pub trait ScalarRefMut<'a> {
     type Owned: Scalar;
 }
 

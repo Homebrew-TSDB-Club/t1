@@ -1,8 +1,4 @@
-use std::fmt::{Debug, Display};
-
-pub trait Primitive:
-    'static + Send + Sync + Sized + Debug + Display + PartialEq + Default + Clone
-{
+pub trait Primitive: 'static + Default + Clone + Copy {
     const TYPE: PrimitiveType;
 }
 

@@ -34,7 +34,7 @@ impl<'a, A: Array> Iterator for ArrayIterator<'a, A> {
     }
 }
 
-pub trait Array: 'static + Debug + Send + Sync + Sized {
+pub trait Array: 'static + Sized {
     type Item: for<'a> Scalar<Ref<'a> = Self::ItemRef<'a>>;
     type ItemRef<'a>: ScalarRef<'a, Owned = Self::Item>
     where
@@ -282,10 +282,7 @@ impl<P: Primitive> Array for NullableFixedSizedListArray<P> {
 }
 
 #[derive(Debug, Clone)]
-pub struct IdArray<A: Array>
-where
-    for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>> + Hash,
-{
+pub struct IdArray<A: Array> {
     values: Dictionary<A>,
     data: Vec<usize>,
 }
@@ -350,16 +347,22 @@ where
     }
 }
 
-impl<A: Array + Default> IdentifiedArray for IdArray<A>
+impl<A: Array> IdentifiedArray for IdArray<A>
 where
     for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>> + Hash,
 {
     type ID = usize;
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct PrimitiveArray<P: Primitive> {
     data: Vec<P>,
+}
+
+impl<P: Primitive> Default for PrimitiveArray<P> {
+    fn default() -> Self {
+        Self { data: Vec::new() }
+    }
 }
 
 impl<P: Primitive> PrimitiveArray<P> {
