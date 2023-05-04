@@ -4,10 +4,16 @@ use croaring::Bitmap;
 use hashbrown::HashMap;
 use pdatastructs::filters::{bloomfilter::BloomFilter, Filter};
 
+#[derive(PartialEq)]
+pub enum Set {
+    Universe,
+    Some(Bitmap),
+}
+
 pub trait Index {
     type Value;
 
-    fn lookup(&self, value: &Self::Value, superset: &mut Option<Bitmap>);
+    fn lookup(&self, value: &Self::Value, superset: &mut Set);
     fn insert(&mut self, row: u32, value: Self::Value);
     fn exactly(&self) -> bool;
 }
@@ -39,10 +45,10 @@ where
     type Value = V;
 
     #[inline]
-    fn lookup(&self, value: &Self::Value, superset: &mut Option<Bitmap>) {
+    fn lookup(&self, value: &Self::Value, superset: &mut Set) {
         self.data.get(value).map(|set| match superset {
-            Some(s) => s.and_inplace(set),
-            None => *superset = Some(set.clone()),
+            Set::Some(s) => s.and_inplace(set),
+            Set::Universe => *superset = Set::Some(set.clone()),
         });
     }
 
@@ -78,8 +84,8 @@ impl<V: Hash> Index for SparseIndex<V> {
     type Value = V;
 
     #[inline]
-    fn lookup(&self, value: &Self::Value, superset: &mut Option<Bitmap>) {
-        let mut bitmap: Box<Bitmap> = Box::new(Bitmap::create());
+    fn lookup(&self, value: &Self::Value, superset: &mut Set) {
+        let mut bitmap = Bitmap::create();
         for (offset, block) in self.seens.iter().enumerate() {
             if block.query(value) {
                 let offset = offset as u32;
@@ -87,8 +93,8 @@ impl<V: Hash> Index for SparseIndex<V> {
             }
         }
         match superset {
-            Some(s) => s.and_inplace(bitmap.as_ref()),
-            None => *superset = Some(bitmap.as_ref().clone()),
+            Set::Some(s) => s.and_inplace(&bitmap),
+            Set::Universe => *superset = Set::Some(bitmap),
         }
     }
 
@@ -135,7 +141,7 @@ mod tests {
     use pdatastructs::filters::bloomfilter::BloomFilter;
 
     use super::{Index, SparseIndex};
-    use crate::index::InvertedIndex;
+    use crate::index::{InvertedIndex, Set};
 
     #[test]
     fn test_bloom_filter() {
@@ -166,11 +172,11 @@ mod tests {
         let mut index = SparseIndex::<usize>::new(1000);
         index.insert(0, 1);
         index.insert(1001, 1);
-        let mut result = None;
+        let mut result = Set::Universe;
         index.lookup(&1, &mut result);
         let mut expect = Bitmap::create();
         expect.add_range(0..2000);
-        assert!(result == Some(expect));
+        assert!(result == Set::Some(expect));
     }
 
     #[test]
@@ -178,12 +184,12 @@ mod tests {
         let mut index = InvertedIndex::<usize>::new();
         index.insert(0, 1);
         index.insert(1001, 1);
-        let mut result = None;
+        let mut result = Set::Universe;
         index.lookup(&1, &mut result);
         let mut expect = Bitmap::create();
         expect.add(0);
         expect.add(1001);
-        assert!(result == Some(expect));
+        assert!(result == Set::Some(expect));
     }
 
     #[test]
@@ -194,11 +200,11 @@ mod tests {
         index_1.insert(1, 1);
         index_2.insert(0, 1);
         index_2.insert(1, 1);
-        let mut result = None;
+        let mut result = Set::Universe;
         index_1.lookup(&1, &mut result);
         index_2.lookup(&1, &mut result);
         let mut b = Bitmap::create();
         b.add(1);
-        assert!(result == Some(b));
+        assert!(result == Set::Some(b));
     }
 }
