@@ -7,9 +7,16 @@ use pdatastructs::filters::{bloomfilter::BloomFilter, Filter};
 pub trait Index {
     type Value;
 
-    fn lookup(&self, value: &Self::Value, superset: &mut Option<Bitmap>);
+    fn apply(&self, value: &Self::Value, superset: &mut Bitmap);
     fn insert(&mut self, row: u32, value: Self::Value);
     fn exactly(&self) -> bool;
+
+    #[inline]
+    fn lookup(&self, value: &Self::Value) -> Bitmap {
+        let mut bitmap = Bitmap::default();
+        self.apply(value, &mut bitmap);
+        bitmap
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -39,16 +46,15 @@ where
     type Value = V;
 
     #[inline]
-    fn lookup(&self, value: &Self::Value, superset: &mut Option<Bitmap>) {
-        self.data.get(value).map(|set| match superset {
-            Some(s) => s.and_inplace(set),
-            None => *superset = Some(set.clone()),
-        });
+    fn apply(&self, value: &Self::Value, superset: &mut Bitmap) {
+        if let Some(set) = self.data.get(value) {
+            superset.and_inplace(set);
+        }
     }
 
     #[inline]
     fn insert(&mut self, row: u32, value: Self::Value) {
-        let bitmap = self.data.entry(value).or_insert_with(|| Bitmap::create());
+        let bitmap = self.data.entry(value).or_insert_with(Bitmap::create);
         bitmap.add(row);
     }
 
@@ -78,17 +84,12 @@ impl<V: Hash> Index for SparseIndex<V> {
     type Value = V;
 
     #[inline]
-    fn lookup(&self, value: &Self::Value, superset: &mut Option<Bitmap>) {
-        let mut bitmap: Box<Bitmap> = Box::new(Bitmap::create());
+    fn apply(&self, value: &Self::Value, superset: &mut Bitmap) {
         for (offset, block) in self.seens.iter().enumerate() {
             if block.query(value) {
                 let offset = offset as u32;
-                bitmap.add_range((offset * self.block_size)..((offset + 1) * self.block_size));
+                superset.add_range((offset * self.block_size)..((offset + 1) * self.block_size));
             }
-        }
-        match superset {
-            Some(s) => s.and_inplace(bitmap.as_ref()),
-            None => *superset = Some(bitmap.as_ref().clone()),
         }
     }
 
@@ -166,11 +167,10 @@ mod tests {
         let mut index = SparseIndex::<usize>::new(1000);
         index.insert(0, 1);
         index.insert(1001, 1);
-        let mut result = None;
-        index.lookup(&1, &mut result);
+        let result = index.lookup(&1);
         let mut expect = Bitmap::create();
         expect.add_range(0..2000);
-        assert!(result == Some(expect));
+        assert_eq!(result, expect);
     }
 
     #[test]
@@ -178,12 +178,11 @@ mod tests {
         let mut index = InvertedIndex::<usize>::new();
         index.insert(0, 1);
         index.insert(1001, 1);
-        let mut result = None;
-        index.lookup(&1, &mut result);
+        let result = index.lookup(&1);
         let mut expect = Bitmap::create();
         expect.add(0);
         expect.add(1001);
-        assert!(result == Some(expect));
+        assert_eq!(result, expect);
     }
 
     #[test]
@@ -194,11 +193,11 @@ mod tests {
         index_1.insert(1, 1);
         index_2.insert(0, 1);
         index_2.insert(1, 1);
-        let mut result = None;
-        index_1.lookup(&1, &mut result);
-        index_2.lookup(&1, &mut result);
+        let mut result = Bitmap::default();
+        index_1.apply(&1, &mut result);
+        index_2.apply(&1, &mut result);
         let mut b = Bitmap::create();
         b.add(1);
-        assert!(result == Some(b));
+        assert_eq!(result, b);
     }
 }
