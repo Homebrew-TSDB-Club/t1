@@ -141,7 +141,7 @@ mod tests {
     use pdatastructs::filters::bloomfilter::BloomFilter;
 
     use super::{Index, SparseIndex};
-    use crate::index::{InvertedIndex, Set};
+    use crate::mutable::index::{InvertedIndex, Set};
 
     #[test]
     fn test_bloom_filter() {

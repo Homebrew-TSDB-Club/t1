@@ -1,5 +1,5 @@
 pub(crate) mod bitmap;
-pub(crate) mod dictionary;
+pub mod dictionary;
 pub mod scalar;
 
 use std::{fmt::Debug, hash::Hash};

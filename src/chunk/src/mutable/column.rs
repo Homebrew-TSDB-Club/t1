@@ -1,12 +1,9 @@
-use common::{
-    array::{
-        Array, ConstFixedSizedListArray, IdArray, IdentifiedArray, ListArray,
-        NullableFixedSizedListArray, PrimitiveArray,
-    },
-    time::{Duration, Instant},
+use common::array::{
+    Array, ConstFixedSizedListArray, IdArray, IdentifiedArray, ListArray,
+    NullableFixedSizedListArray, PrimitiveArray,
 };
 
-use crate::index::IndexImpl;
+use super::index::IndexImpl;
 
 pub type UInt8Field = NullableFixedSizedListArray<u8>;
 pub type UInt16Field = NullableFixedSizedListArray<u16>;
@@ -56,48 +53,24 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum LabelImpl {
-    String(LabelColumn<StringLabel>),
-    IPv4(LabelColumn<IPv4Label>),
-    IPv6(LabelColumn<IPv6Label>),
-    Int(LabelColumn<IntLabel>),
-    Bool(LabelColumn<BoolLabel>),
-}
+pub type LabelImpl = common::column::LabelImpl<
+    LabelColumn<StringLabel>,
+    LabelColumn<IPv4Label>,
+    LabelColumn<IPv6Label>,
+    LabelColumn<IntLabel>,
+    LabelColumn<BoolLabel>,
+>;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum FieldImpl {
-    UInt8(FieldColumn<UInt8Field>),
-    UInt16(FieldColumn<UInt16Field>),
-    UInt32(FieldColumn<UInt32Field>),
-    UInt64(FieldColumn<UInt64Field>),
-    Int8(FieldColumn<Int8Field>),
-    Int16(FieldColumn<Int16Field>),
-    Int32(FieldColumn<Int32Field>),
-    Int64(FieldColumn<Int64Field>),
-    Float32(FieldColumn<Float32Field>),
-    Float64(FieldColumn<Float64Field>),
-    Bool(FieldColumn<BoolField>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ChunkMeta {
-    pub(crate) start_at: Instant,
-    time_interval: Duration,
-    series_len: u32,
-}
-
-impl ChunkMeta {
-    #[allow(unused)]
-    #[inline]
-    pub(crate) fn end_at(&self) -> Instant {
-        self.start_at + self.time_interval * (self.series_len - 1)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct MutableChunk {
-    pub label: Vec<LabelImpl>,
-    pub field: Vec<FieldImpl>,
-    pub meta: ChunkMeta,
-}
+pub type FieldImpl = common::column::FieldImpl<
+    FieldColumn<UInt8Field>,
+    FieldColumn<UInt16Field>,
+    FieldColumn<UInt32Field>,
+    FieldColumn<UInt64Field>,
+    FieldColumn<Int8Field>,
+    FieldColumn<Int16Field>,
+    FieldColumn<Int32Field>,
+    FieldColumn<Int64Field>,
+    FieldColumn<Float32Field>,
+    FieldColumn<Float64Field>,
+    FieldColumn<BoolField>,
+>;

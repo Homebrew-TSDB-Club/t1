@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+arrow2 = "0.17.0"
 common = { path = "../common" }
 croaring = "0.8"
 hashbrown = "0.13"
