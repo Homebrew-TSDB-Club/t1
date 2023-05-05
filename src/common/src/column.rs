@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, PartialEq)]
-pub enum LabelImpl<S, IP4, IP6, I, B> {
+pub enum Label<S, IP4, IP6, I, B> {
     String(S),
     IPv4(IP4),
     IPv6(IP6),
@@ -8,7 +8,7 @@ pub enum LabelImpl<S, IP4, IP6, I, B> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FieldImpl<U8, U16, U32, U64, I8, I16, I32, I64, F32, F64, B> {
+pub enum Field<U8, U16, U32, U64, I8, I16, I32, I64, F32, F64, B> {
     UInt8(U8),
     UInt16(U16),
     UInt32(U32),

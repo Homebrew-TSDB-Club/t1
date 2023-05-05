@@ -53,7 +53,7 @@ where
     }
 }
 
-pub type LabelImpl = common::column::LabelImpl<
+pub type LabelImpl = common::column::Label<
     LabelColumn<StringLabel>,
     LabelColumn<IPv4Label>,
     LabelColumn<IPv6Label>,
@@ -61,7 +61,7 @@ pub type LabelImpl = common::column::LabelImpl<
     LabelColumn<BoolLabel>,
 >;
 
-pub type FieldImpl = common::column::FieldImpl<
+pub type FieldImpl = common::column::Field<
     FieldColumn<UInt8Field>,
     FieldColumn<UInt16Field>,
     FieldColumn<UInt32Field>,
