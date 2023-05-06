@@ -1,109 +1,148 @@
 use common::{
     column::Label,
-    time::{Instant, EPOCH},
+    time::{Duration, Instant},
 };
-use promql::{AggregationAction, LabelMatchOp, Node, Vector};
 
 use crate::{
     expression::{
-        AggregateAction, Aggregation, Expression, Function, Matcher, MatcherOp, Pipeline,
-        Projection, Range, Resource,
+        Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Project, Range, Resource,
     },
     Error,
 };
 
-pub fn parse(q: &str) -> Result<Expression, Error> {
-    let ast = promql::parse(q.as_ref(), false).map_err(|err| Error::InternalError {
-        err: format!("{:?}", err),
+pub fn parse(literal: &str) -> Result<Expression, Error> {
+    let expr = promql::parse(literal.as_bytes(), true).map_err(|e| Error::ParsingWrong {
+        err: format!("{}", e),
     })?;
-    match ast {
-        Node::Vector(vector) => translate_vector(vector, None, None),
+    translate(expr)
+}
+
+fn translate(expr: promql::Node) -> Result<Expression, Error> {
+    use promql::{LabelMatchOp, Node};
+
+    match expr {
+        Node::Vector(vector) => {
+            let mut name = None;
+            let mut matchers = Vec::with_capacity(vector.labels.len() - 1);
+
+            for label in vector.labels {
+                if label.name == "__name__" {
+                    name = Resource::from_str(&label.value);
+                } else {
+                    let op = match label.op {
+                        LabelMatchOp::Eq => MatcherOp::LiteralEqual,
+                        LabelMatchOp::Ne => MatcherOp::LiteralNotEqual,
+                        LabelMatchOp::REq => MatcherOp::RegexMatch,
+                        LabelMatchOp::RNe => MatcherOp::RegexNotMatch,
+                    };
+                    matchers.push(Matcher {
+                        name: label.name,
+                        op,
+                        value: Label::String(label.value),
+                    });
+                }
+            }
+
+            let mut end = Instant::now();
+            if let Some(offset) = vector.offset {
+                end = end - Duration::from_secs(offset as i64);
+            }
+            let start = vector
+                .range
+                .map(|range| end - Duration::from_secs(range as i64));
+
+            Ok(Expression::Project(Project {
+                resource: name.ok_or(Error::NoName)?,
+                matchers,
+                range: Range {
+                    start: start.map(|start| start.into()),
+                    end: Some(end),
+                },
+            }))
+        }
         Node::Function {
             name,
-            args,
+            args: arg_nodes,
             aggregation,
-        } => match args.into_iter().next().unwrap() {
-            Node::Vector(vector) => {
-                let aggregation = aggregation.map(|a| {
-                    let action = match a.action {
-                        AggregationAction::Without => AggregateAction::Without,
-                        AggregationAction::By => AggregateAction::With,
-                    };
-                    Aggregation {
-                        action,
-                        labels: a.labels,
-                    }
-                });
-                translate_vector(vector, Some(name), aggregation)
+        } => match aggregation {
+            Some(aggr) => {
+                let action = match aggr.action {
+                    promql::AggregationAction::Without => AggregateAction::Without,
+                    promql::AggregationAction::By => AggregateAction::With,
+                };
+
+                let mut args = Vec::with_capacity(arg_nodes.len());
+                for arg in arg_nodes {
+                    args.push(translate(arg)?);
+                }
+
+                Ok(Expression::Aggregate(Aggregate {
+                    name,
+                    action,
+                    by: aggr.labels,
+                    args,
+                }))
             }
-            _ => {
-                unimplemented!()
+            None => {
+                let mut args = Vec::with_capacity(arg_nodes.len());
+                for arg in arg_nodes {
+                    args.push(translate(arg)?);
+                }
+                Ok(Expression::Call(Call { name, args }))
             }
         },
         _ => unimplemented!(),
     }
 }
 
-fn translate_vector(
-    vector: Vector,
-    function: Option<String>,
-    aggregation: Option<Aggregation>,
-) -> Result<Expression, Error> {
-    let range = Range {
-        start: vector
-            .range
-            .map(|sec| EPOCH + (Instant::now() - Instant::from_millis(sec as i64 * 1000))),
-        end: None,
-    };
-    let mut name = None;
-    let mut filters = Vec::with_capacity(vector.labels.len() - 1);
-    for label in vector.labels {
-        if label.name == "__name__" {
-            name = Some(label.value);
-        } else {
-            let op = match label.op {
-                LabelMatchOp::Eq => MatcherOp::LiteralEqual,
-                LabelMatchOp::Ne => MatcherOp::LiteralNotEqual,
-                LabelMatchOp::REq => MatcherOp::RegexMatch,
-                LabelMatchOp::RNe => MatcherOp::RegexNotMatch,
-            };
-            filters.push(Matcher {
-                name: label.name,
-                op,
-                value: Some(Label::String(label.value)),
-            })
-        }
-    }
-
-    let functions = function.map_or_else(Vec::new, |name| vec![Function { name }]);
-
-    Ok(Expression {
-        resource: Resource {
-            catalog: None,
-            namespace: None,
-            resource: name.ok_or(Error::NoName)?,
-        },
-        filters,
-        range,
-        projection: vec![Projection {
-            name: String::from("value"),
-            pipeline: Pipeline {
-                functions,
-                breaker: None,
-            },
-        }],
-        aggregation,
-    })
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::promql::parse;
+    use common::{column::Label, time::Instant};
+
+    use super::parse;
+    use crate::expression::{
+        Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Project, Range, Resource,
+    };
 
     #[test]
     fn it_works() {
-        let query = "sum by (test) (something_used{env=\"production\"}[5m])";
+        let query = "sum by (test) (rate(foo.bar.something_used{env=\"production\", \
+                     status!~\"4..\"}[5m] offset 1w))";
+
         let expr = parse(query).unwrap();
-        println!("{:?}", expr);
+
+        let expected = Expression::Aggregate(Aggregate {
+            name: "sum".into(),
+            action: AggregateAction::With,
+            by: vec!["test".into()],
+            args: vec![Expression::Call(Call {
+                name: "rate".into(),
+                args: vec![Expression::Project(Project {
+                    resource: Resource {
+                        catalog: Some("foo".into()),
+                        namespace: Some("bar".into()),
+                        table: "something_used".into(),
+                    },
+                    matchers: vec![
+                        Matcher {
+                            name: "env".into(),
+                            op: MatcherOp::LiteralEqual,
+                            value: Label::String("production".into()),
+                        },
+                        Matcher {
+                            name: "status".into(),
+                            op: MatcherOp::RegexNotMatch,
+                            value: Label::String("4..".into()),
+                        },
+                    ],
+                    range: Range {
+                        start: Some(Instant::from_millis(1682752166643)),
+                        end: Some(Instant::from_millis(1682752466643)),
+                    },
+                })],
+            })],
+        });
+
+        assert_eq!(expr, expected);
     }
 }

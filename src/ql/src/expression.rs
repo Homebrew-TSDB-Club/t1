@@ -1,64 +1,96 @@
 use common::{column::Label, time::Instant};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Resource {
     pub catalog: Option<String>,
     pub namespace: Option<String>,
-    pub resource: String,
+    pub table: String,
 }
 
-#[derive(Debug, Clone)]
+impl Resource {
+    pub fn from_str(value: &str) -> Option<Self> {
+        let slice: Vec<_> = value.split('.').collect();
+        let mut catalog = None;
+        let mut namespace = None;
+        let table;
+        match slice.len() {
+            2 => {
+                namespace = Some(slice[0].to_owned());
+                table = slice[1].to_owned();
+            }
+            1 => {
+                table = slice[0].to_owned();
+            }
+            0 => return None,
+            _ => {
+                catalog = Some(slice[0].to_owned());
+                namespace = Some(slice[1].to_owned());
+                table = slice[2..].join(".");
+            }
+        }
+
+        Some(Resource {
+            catalog,
+            namespace,
+            table,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum AggregateAction {
     Without,
     With,
 }
 
-#[derive(Debug, Clone)]
-pub struct Aggregation {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Aggregate {
+    pub name: String,
     pub action: AggregateAction,
-    pub labels: Vec<String>,
+    pub by: Vec<String>,
+    pub args: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Call {
+    pub name: String,
+    pub args: Vec<Expression>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Function {
-    pub name: String,
+pub struct Project {
+    pub resource: Resource,
+    pub matchers: Vec<Matcher>,
+    pub range: Range,
 }
 
-#[derive(Debug)]
-pub struct Pipeline {
-    pub functions: Vec<Function>,
-    pub breaker: Option<Aggregation>,
+impl PartialEq for Project {
+    fn eq(&self, other: &Self) -> bool {
+        self.resource == other.resource && self.matchers == other.matchers
+    }
 }
 
-#[derive(Debug)]
-pub struct Projection {
-    pub name: String,
-    pub pipeline: Pipeline,
-}
-
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Range {
     pub start: Option<Instant>,
     pub end: Option<Instant>,
 }
 
-#[derive(Debug)]
-pub struct Expression {
-    pub resource: Resource,
-    pub filters: Vec<Matcher>,
-    pub range: Range,
-    pub projection: Vec<Projection>,
-    pub aggregation: Option<Aggregation>,
+#[derive(Debug, PartialEq, Clone)]
+pub enum Expression {
+    Aggregate(Aggregate),
+    Call(Call),
+    Project(Project),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Matcher {
     pub name: String,
     pub op: MatcherOp,
-    pub value: Option<Label<String, String, String, String, String>>,
+    pub value: Label<String, String, String, String, String>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum MatcherOp {
     LiteralEqual,
     LiteralNotEqual,

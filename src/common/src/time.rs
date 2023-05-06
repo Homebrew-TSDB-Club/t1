@@ -16,13 +16,20 @@ pub struct Duration {
 }
 
 impl Duration {
-    pub const SECOND: Self = Duration {
+    pub const SECOND: Self = Self {
         millis: MILLIS_PER_SEC,
     };
 
     #[inline]
     pub fn as_millis(&self) -> i64 {
         self.millis
+    }
+
+    #[inline]
+    pub fn from_secs(secs: i64) -> Self {
+        Self {
+            millis: secs * 1000,
+        }
     }
 }
 

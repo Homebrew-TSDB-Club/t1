@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 common = { path = "../common" }
 promql = "0.4"
-thiserror = "1.0.40"
+thiserror = "1"
