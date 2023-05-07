@@ -1,3 +1,5 @@
+use std::net::{Ipv4Addr, Ipv6Addr};
+
 use common::{column::Label, time::Instant};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -58,13 +60,13 @@ pub struct Call {
 }
 
 #[derive(Debug, Clone)]
-pub struct Project {
+pub struct Scan {
     pub resource: Resource,
     pub matchers: Vec<Matcher>,
     pub range: Range,
 }
 
-impl PartialEq for Project {
+impl PartialEq for Scan {
     fn eq(&self, other: &Self) -> bool {
         self.resource == other.resource && self.matchers == other.matchers
     }
@@ -80,14 +82,14 @@ pub struct Range {
 pub enum Expression {
     Aggregate(Aggregate),
     Call(Call),
-    Project(Project),
+    Scan(Scan),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Matcher {
-    pub name: String,
+pub struct Matcher<Name = String> {
+    pub name: Name,
     pub op: MatcherOp,
-    pub value: Label<String, String, String, String, String>,
+    pub value: Label<String, Ipv4Addr, Ipv6Addr, i64, bool>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

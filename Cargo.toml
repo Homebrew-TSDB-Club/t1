@@ -3,4 +3,4 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = ["src/core/*"]
+members = ["src/core/*", "src/storage"]

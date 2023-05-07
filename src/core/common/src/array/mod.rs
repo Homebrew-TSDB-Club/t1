@@ -64,10 +64,6 @@ pub trait Array: 'static + Sized {
     }
 }
 
-pub trait IdentifiedArray: Array {
-    type ID: Eq + Hash;
-}
-
 #[derive(Debug, Clone)]
 pub struct FixedSizedListArray<P: Primitive> {
     data: Vec<P>,
@@ -282,15 +278,36 @@ impl<P: Primitive> Array for NullableFixedSizedListArray<P> {
 }
 
 #[derive(Debug, Clone)]
-pub struct IdArray<A: Array> {
+pub struct IdArray<A> {
     values: Dictionary<A>,
     data: Vec<usize>,
 }
 
 impl<A: Array> IdArray<A>
 where
-    for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>> + Hash,
+    for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>>,
+    for<'a> A::ItemRef<'a>: Hash,
 {
+    pub fn lookup_id(&self, value: &A::ItemRef<'_>) -> Option<usize> {
+        self.values.lookup(value)
+    }
+
+    pub fn push_and_get_id(&mut self, value: <Self as Array>::ItemRef<'_>) -> usize {
+        match value {
+            Some(value) => {
+                let valud_id = self.values.lookup_or_insert(value);
+                self.data.push(valud_id);
+                valud_id
+            }
+            None => {
+                self.push_zero();
+                0
+            }
+        }
+    }
+}
+
+impl<A: Array> IdArray<A> {
     pub fn new(array: A) -> Self {
         Self {
             values: Dictionary::new(array),
@@ -301,7 +318,8 @@ where
 
 impl<A: Array> Array for IdArray<A>
 where
-    for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>> + Hash,
+    for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>>,
+    for<'a> A::ItemRef<'a>: Hash,
 {
     type Item = Option<A::Item>;
     type ItemRef<'a> = Option<A::ItemRef<'a>>;
@@ -345,13 +363,6 @@ where
     fn len(&self) -> usize {
         self.data.len()
     }
-}
-
-impl<A: Array> IdentifiedArray for IdArray<A>
-where
-    for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>> + Hash,
-{
-    type ID = usize;
 }
 
 #[derive(Debug, Clone)]

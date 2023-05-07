@@ -13,17 +13,13 @@ fn hash_with_state<H: Hash>(state: &RandomState, value: &H) -> u64 {
 }
 
 #[derive(Debug, Clone)]
-pub struct Dictionary<A: Array> {
+pub struct Dictionary<A> {
     hash_state: RandomState,
     dedup: HashMap<usize, (), ()>,
     data: A,
 }
 
-impl<A: Array> Dictionary<A>
-where
-    for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>> + Hash,
-{
-    #[inline]
+impl<A> Dictionary<A> {
     pub(crate) fn new(data: A) -> Self {
         Self {
             hash_state: RandomState::new(),
@@ -31,7 +27,13 @@ where
             data,
         }
     }
+}
 
+impl<A: Array> Dictionary<A>
+where
+    for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>>,
+    for<'a> A::ItemRef<'a>: Hash,
+{
     #[inline]
     pub(crate) fn lookup_or_insert(&mut self, value: A::ItemRef<'_>) -> usize {
         let hash = hash_with_state(&self.hash_state, &value);
@@ -56,12 +58,12 @@ where
 
     #[allow(unused)]
     #[inline]
-    pub(crate) fn lookup(&self, value: A::ItemRef<'_>) -> Option<usize> {
+    pub(crate) fn lookup(&self, value: &A::ItemRef<'_>) -> Option<usize> {
         return self
             .dedup
             .raw_entry()
             .from_hash(hash_with_state(&self.hash_state, &value), |key| {
-                self.data.get_unchecked(*key) == value
+                self.data.get_unchecked(*key) == *value
             })
             .map(|(&symbol, &())| symbol + 1);
     }
@@ -110,7 +112,7 @@ mod tests {
         let v1 = dict.get(id);
         let v2 = dict.get(id2);
         assert_eq!(v1, v2);
-        let id = dict.lookup("hello, world".as_ref());
+        let id = dict.lookup(&"hello, world".as_ref());
         assert!(id == Some(1));
     }
 }

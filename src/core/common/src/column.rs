@@ -1,3 +1,6 @@
+pub type LabelType = Label<(), (), (), (), ()>;
+pub type FieldType = Field<(), (), (), (), (), (), (), (), (), (), ()>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Label<S, IP4, IP6, I, B> {
     String(S),

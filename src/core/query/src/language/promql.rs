@@ -3,9 +3,9 @@ use common::{
     time::{Duration, Instant},
 };
 
-use crate::{
+use super::{
     expression::{
-        Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Project, Range, Resource,
+        Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Range, Resource, Scan,
     },
     Error,
 };
@@ -51,7 +51,7 @@ fn translate(expr: promql::Node) -> Result<Expression, Error> {
                 .range
                 .map(|range| end - Duration::from_secs(range as i64));
 
-            Ok(Expression::Project(Project {
+            Ok(Expression::Scan(Scan {
                 resource: name.ok_or(Error::NoName)?,
                 matchers,
                 range: Range {
@@ -100,8 +100,8 @@ mod tests {
     use common::{column::Label, time::Instant};
 
     use super::parse;
-    use crate::expression::{
-        Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Project, Range, Resource,
+    use crate::language::expression::{
+        Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Range, Resource, Scan,
     };
 
     #[test]
@@ -117,7 +117,7 @@ mod tests {
             by: vec!["test".into()],
             args: vec![Expression::Call(Call {
                 name: "rate".into(),
-                args: vec![Expression::Project(Project {
+                args: vec![Expression::Scan(Scan {
                     resource: Resource {
                         catalog: Some("foo".into()),
                         namespace: Some("bar".into()),

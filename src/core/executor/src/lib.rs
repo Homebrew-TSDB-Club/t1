@@ -19,14 +19,3 @@ pub trait Stream {
 
     fn next(&self) -> Self::NextFut<'_>;
 }
-
-pub trait Execution {
-    type Stream: Stream;
-
-    fn execute(&self) -> Self::Stream;
-}
-
-pub enum ExprImpl {}
-
-#[cfg(test)]
-mod tests {}

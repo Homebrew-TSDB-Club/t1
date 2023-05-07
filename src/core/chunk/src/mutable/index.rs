@@ -4,10 +4,32 @@ use croaring::Bitmap;
 use hashbrown::HashMap;
 use pdatastructs::filters::{bloomfilter::BloomFilter, Filter};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum Set {
     Universe,
     Some(Bitmap),
+}
+
+impl Set {
+    pub fn clear(&mut self) {
+        match self {
+            Set::Universe => *self = Self::Some(Bitmap::create()),
+            Set::Some(set) => set.clear(),
+        }
+    }
+
+    pub fn and_inplace(&mut self, rhs: Self) {
+        match self {
+            Set::Universe => match rhs {
+                Set::Universe => {}
+                Set::Some(_) => *self = rhs,
+            },
+            Set::Some(lhs) => match rhs {
+                Set::Universe => {}
+                Set::Some(rhs) => lhs.and_inplace(&rhs),
+            },
+        }
+    }
 }
 
 pub trait Index {
@@ -131,6 +153,27 @@ where
         match data_type {
             IndexType::Inverted(_) => IndexImpl::Inverted(InvertedIndex::new()),
             IndexType::Sparse(block_size) => IndexImpl::Sparse(SparseIndex::new(block_size)),
+        }
+    }
+
+    pub fn lookup(&self, value: &V, superset: &mut Set) {
+        match self {
+            IndexType::Inverted(index) => index.lookup(value, superset),
+            IndexType::Sparse(index) => index.lookup(value, superset),
+        }
+    }
+
+    pub fn exactly(&self) -> bool {
+        match self {
+            IndexType::Inverted(index) => index.exactly(),
+            IndexType::Sparse(index) => index.exactly(),
+        }
+    }
+
+    pub fn insert(&mut self, id: usize, v: V) {
+        match self {
+            IndexType::Inverted(index) => index.insert(id as u32, v),
+            IndexType::Sparse(index) => index.insert(id as u32, v),
         }
     }
 }
