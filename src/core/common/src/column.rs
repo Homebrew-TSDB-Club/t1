@@ -1,5 +1,27 @@
-pub type LabelType = Label<(), (), (), (), ()>;
-pub type FieldType = Field<(), (), (), (), (), (), (), (), (), (), ()>;
+use std::{
+    fmt::Display,
+    net::{Ipv4Addr, Ipv6Addr},
+};
+
+#[derive(Debug)]
+pub struct LabelType(pub Label<(), (), (), (), ()>);
+
+impl Display for LabelType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Label::String(_) => f.write_str("String"),
+            Label::IPv4(_) => f.write_str("IPv4"),
+            Label::IPv6(_) => f.write_str("IPv6"),
+            Label::Int(_) => f.write_str("Int"),
+            Label::Bool(_) => f.write_str("Bool"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FieldType(Field<(), (), (), (), (), (), (), (), (), (), ()>);
+
+pub type LabelValue = Label<String, Ipv4Addr, Ipv6Addr, i64, bool>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Label<S, IP4, IP6, I, B> {
@@ -8,6 +30,18 @@ pub enum Label<S, IP4, IP6, I, B> {
     IPv6(IP6),
     Int(I),
     Bool(B),
+}
+
+impl<S, IP4, IP6, I, B> Label<S, IP4, IP6, I, B> {
+    pub fn r#type(&self) -> LabelType {
+        match self {
+            Label::String(_) => LabelType(Label::String(())),
+            Label::IPv4(_) => LabelType(Label::IPv4(())),
+            Label::IPv6(_) => LabelType(Label::IPv6(())),
+            Label::Int(_) => LabelType(Label::Int(())),
+            Label::Bool(_) => LabelType(Label::Bool(())),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

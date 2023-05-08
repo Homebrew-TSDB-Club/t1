@@ -176,6 +176,28 @@ impl<'a, P: Primitive> ScalarRefMut<'a> for NullableFixedSizeListRefMut<'a, P> {
     type Owned = NullableFixedSizedList<P>;
 }
 
+impl<P: Primitive, const SIZE: usize> Scalar for [P; SIZE] {
+    type Ref<'a> = &'a [P; SIZE]
+    where
+        Self: 'a;
+
+    type RefMut<'a> = &'a mut [P; SIZE]
+    where
+        Self: 'a;
+
+    fn as_ref(&self) -> Self::Ref<'_> {
+        self
+    }
+}
+
+impl<'a, P: Primitive, const SIZE: usize> ScalarRef<'a> for &'a [P; SIZE] {
+    type Owned = [P; SIZE];
+}
+
+impl<'a, P: Primitive, const SIZE: usize> ScalarRefMut<'a> for &'a mut [P; SIZE] {
+    type Owned = [P; SIZE];
+}
+
 #[cfg(test)]
 mod tests {
     use super::{NullableFixedSizedList, Scalar};

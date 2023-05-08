@@ -20,7 +20,7 @@ impl ChunkMeta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub struct MutableChunk {
     pub label: Vec<LabelImpl>,
     pub field: Vec<FieldImpl>,

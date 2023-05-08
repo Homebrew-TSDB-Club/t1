@@ -420,7 +420,7 @@ impl<P: Primitive> Array for PrimitiveArray<P> {
 
 #[derive(Debug, Clone)]
 pub struct ConstFixedSizedListArray<P: Primitive, const SIZE: usize> {
-    array: FixedSizedListArray<P>,
+    data: Vec<P>,
 }
 
 impl<P: Primitive, const SIZE: usize> Default for ConstFixedSizedListArray<P, SIZE> {
@@ -432,39 +432,50 @@ impl<P: Primitive, const SIZE: usize> Default for ConstFixedSizedListArray<P, SI
 impl<P: Primitive, const SIZE: usize> ConstFixedSizedListArray<P, SIZE> {
     #[inline]
     pub fn new() -> Self {
-        Self {
-            array: FixedSizedListArray::new(SIZE),
-        }
+        Self { data: Vec::new() }
     }
 }
 
 impl<P: Primitive, const SIZE: usize> Array for ConstFixedSizedListArray<P, SIZE> {
-    type Item = <FixedSizedListArray<P> as Array>::Item;
-    type ItemRef<'a> = <FixedSizedListArray<P> as Array>::ItemRef<'a>;
-    type ItemRefMut<'a> = <FixedSizedListArray<P> as Array>::ItemRefMut<'a>;
+    type Item = [P; SIZE];
+    type ItemRef<'a> = &'a [P; SIZE];
+    type ItemRefMut<'a> = &'a mut [P; SIZE];
 
     fn get(&self, id: usize) -> Option<Self::ItemRef<'_>> {
-        self.array.get(id)
+        if (id + 1) * SIZE > self.data.len() {
+            return None;
+        }
+        Some(self.get_unchecked(id))
     }
 
     fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
-        self.array.get_unchecked(id)
+        self.data[id * SIZE..(id + 1) * SIZE]
+            .split_array_ref::<SIZE>()
+            .0
     }
 
     fn get_mut(&mut self, id: usize) -> Option<Self::ItemRefMut<'_>> {
-        self.array.get_mut(id)
+        if (id + 1) * SIZE > self.data.len() {
+            return None;
+        }
+
+        Some(
+            self.data[id * SIZE..(id + 1) * SIZE]
+                .split_array_mut::<SIZE>()
+                .0,
+        )
     }
 
     fn push(&mut self, value: Self::ItemRef<'_>) {
-        self.array.push(value)
+        self.data.extend_from_slice(&value[..])
     }
 
     fn push_zero(&mut self) {
-        self.array.push_zero()
+        self.data.extend_from_slice(&[P::default(); SIZE][..])
     }
 
     fn len(&self) -> usize {
-        self.array.len()
+        self.data.len() / SIZE
     }
 }
 

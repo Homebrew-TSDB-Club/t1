@@ -8,3 +8,5 @@ common = { path = "../common" }
 croaring = "0.8"
 hashbrown = "0.13"
 pdatastructs = "0.7"
+regex = "1"
+thiserror = "1"

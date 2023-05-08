@@ -1,14 +1,12 @@
 use common::{
     column::Label,
-    time::{Duration, Instant},
-};
-
-use super::{
     expression::{
         Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Range, Resource, Scan,
     },
-    Error,
+    time::{Duration, Instant},
 };
+
+use super::Error;
 
 pub fn parse(literal: &str) -> Result<Expression, Error> {
     let expr = promql::parse(literal.as_bytes(), true).map_err(|e| Error::ParsingWrong {
@@ -30,15 +28,18 @@ fn translate(expr: promql::Node) -> Result<Expression, Error> {
                     name = Resource::from_str(&label.value);
                 } else {
                     let op = match label.op {
-                        LabelMatchOp::Eq => MatcherOp::LiteralEqual,
-                        LabelMatchOp::Ne => MatcherOp::LiteralNotEqual,
-                        LabelMatchOp::REq => MatcherOp::RegexMatch,
-                        LabelMatchOp::RNe => MatcherOp::RegexNotMatch,
+                        LabelMatchOp::Eq => {
+                            MatcherOp::LiteralEqual(Some(Label::String(label.value)))
+                        }
+                        LabelMatchOp::Ne => {
+                            MatcherOp::LiteralNotEqual(Some(Label::String(label.value)))
+                        }
+                        LabelMatchOp::REq => MatcherOp::RegexMatch(label.value),
+                        LabelMatchOp::RNe => MatcherOp::RegexNotMatch(label.value),
                     };
                     matchers.push(Matcher {
                         name: label.name,
                         op,
-                        value: Label::String(label.value),
                     });
                 }
             }
@@ -97,12 +98,15 @@ fn translate(expr: promql::Node) -> Result<Expression, Error> {
 
 #[cfg(test)]
 mod tests {
-    use common::{column::Label, time::Instant};
+    use common::{
+        column::Label,
+        expression::{
+            Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Range, Resource, Scan,
+        },
+        time::Instant,
+    };
 
     use super::parse;
-    use crate::language::expression::{
-        Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Range, Resource, Scan,
-    };
 
     #[test]
     fn it_works() {
@@ -126,13 +130,11 @@ mod tests {
                     matchers: vec![
                         Matcher {
                             name: "env".into(),
-                            op: MatcherOp::LiteralEqual,
-                            value: Label::String("production".into()),
+                            op: MatcherOp::LiteralEqual(Some(Label::String("production".into()))),
                         },
                         Matcher {
                             name: "status".into(),
-                            op: MatcherOp::RegexNotMatch,
-                            value: Label::String("4..".into()),
+                            op: MatcherOp::RegexNotMatch("4..".into()),
                         },
                     ],
                     range: Range {

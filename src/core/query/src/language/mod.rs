@@ -1,4 +1,3 @@
-pub mod expression;
 pub mod promql;
 
 use thiserror::Error;

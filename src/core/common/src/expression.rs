@@ -1,6 +1,4 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
-
-use common::{column::Label, time::Instant};
+use crate::{column::LabelValue, time::Instant};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Resource {
@@ -89,13 +87,23 @@ pub enum Expression {
 pub struct Matcher<Name = String> {
     pub name: Name,
     pub op: MatcherOp,
-    pub value: Label<String, Ipv4Addr, Ipv6Addr, i64, bool>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum MatcherOp {
-    LiteralEqual,
-    LiteralNotEqual,
-    RegexMatch,
-    RegexNotMatch,
+#[derive(Debug, Clone, PartialEq)]
+pub enum MatcherOp<V = LabelValue> {
+    LiteralEqual(Option<V>),
+    LiteralNotEqual(Option<V>),
+    RegexMatch(String),
+    RegexNotMatch(String),
+}
+
+impl<V> MatcherOp<V> {
+    pub fn positive(&self) -> bool {
+        match self {
+            MatcherOp::LiteralEqual(_) => true,
+            MatcherOp::LiteralNotEqual(_) => false,
+            MatcherOp::RegexMatch(_) => true,
+            MatcherOp::RegexNotMatch(_) => false,
+        }
+    }
 }

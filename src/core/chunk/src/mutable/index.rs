@@ -4,38 +4,53 @@ use croaring::Bitmap;
 use hashbrown::HashMap;
 use pdatastructs::filters::{bloomfilter::BloomFilter, Filter};
 
-#[derive(PartialEq, Debug)]
-pub enum Set {
-    Universe,
-    Some(Bitmap),
-}
+// #[derive(PartialEq, Debug)]
+// pub enum Set {
+//     Universe,
+//     Some(Bitmap),
+// }
 
-impl Set {
-    pub fn clear(&mut self) {
-        match self {
-            Set::Universe => *self = Self::Some(Bitmap::create()),
-            Set::Some(set) => set.clear(),
-        }
-    }
+// impl Set {
+//     pub fn clear(&mut self) {
+//         match self {
+//             Set::Universe => *self = Self::Some(Bitmap::create()),
+//             Set::Some(set) => set.clear(),
+//         }
+//     }
 
-    pub fn and_inplace(&mut self, rhs: Self) {
-        match self {
-            Set::Universe => match rhs {
-                Set::Universe => {}
-                Set::Some(_) => *self = rhs,
-            },
-            Set::Some(lhs) => match rhs {
-                Set::Universe => {}
-                Set::Some(rhs) => lhs.and_inplace(&rhs),
-            },
-        }
-    }
-}
+//     pub fn and_inplace(&mut self, rhs: Self) {
+//         match self {
+//             Set::Universe => match rhs {
+//                 Set::Universe => {}
+//                 Set::Some(_) => *self = rhs,
+//             },
+//             Set::Some(lhs) => match rhs {
+//                 Set::Universe => {}
+//                 Set::Some(rhs) => lhs.and_inplace(&rhs),
+//             },
+//         }
+//     }
+
+//     pub fn andnot_inplace(&mut self, rhs: Self) {
+//         match self {
+//             Set::Universe => match rhs {
+//                 Set::Universe => *self = Set::Some(Bitmap::create()),
+//                 Set::Some(_) => {
+//                     (0..self.)
+//                 }
+//             },
+//             Set::Some(lhs) => match rhs {
+//                 Set::Universe => {}
+//                 Set::Some(rhs) => lhs.andnot_inplace(&rhs),
+//             },
+//         }
+//     }
+// }
 
 pub trait Index {
     type Value;
 
-    fn lookup(&self, value: &Self::Value, superset: &mut Set);
+    fn lookup<F: FnMut(&Bitmap)>(&self, value: &Self::Value, f: F);
     fn insert(&mut self, row: u32, value: Self::Value);
     fn exactly(&self) -> bool;
 }
@@ -67,11 +82,8 @@ where
     type Value = V;
 
     #[inline]
-    fn lookup(&self, value: &Self::Value, superset: &mut Set) {
-        self.data.get(value).map(|set| match superset {
-            Set::Some(s) => s.and_inplace(set),
-            Set::Universe => *superset = Set::Some(set.clone()),
-        });
+    fn lookup<F: FnMut(&Bitmap)>(&self, value: &Self::Value, mut f: F) {
+        self.data.get(value).map(|set| (f)(set));
     }
 
     #[inline]
@@ -106,7 +118,7 @@ impl<V: Hash> Index for SparseIndex<V> {
     type Value = V;
 
     #[inline]
-    fn lookup(&self, value: &Self::Value, superset: &mut Set) {
+    fn lookup<F: FnMut(&Bitmap)>(&self, value: &Self::Value, mut f: F) {
         let mut bitmap = Bitmap::create();
         for (offset, block) in self.seens.iter().enumerate() {
             if block.query(value) {
@@ -114,10 +126,8 @@ impl<V: Hash> Index for SparseIndex<V> {
                 bitmap.add_range((offset * self.block_size)..((offset + 1) * self.block_size));
             }
         }
-        match superset {
-            Set::Some(s) => s.and_inplace(&bitmap),
-            Set::Universe => *superset = Set::Some(bitmap),
-        }
+
+        (f)(&bitmap);
     }
 
     #[inline]
@@ -156,10 +166,10 @@ where
         }
     }
 
-    pub fn lookup(&self, value: &V, superset: &mut Set) {
+    pub fn lookup<F: FnMut(&Bitmap)>(&self, value: &V, f: F) {
         match self {
-            IndexType::Inverted(index) => index.lookup(value, superset),
-            IndexType::Sparse(index) => index.lookup(value, superset),
+            IndexType::Inverted(index) => index.lookup(value, f),
+            IndexType::Sparse(index) => index.lookup(value, f),
         }
     }
 
@@ -184,7 +194,7 @@ mod tests {
     use pdatastructs::filters::bloomfilter::BloomFilter;
 
     use super::{Index, SparseIndex};
-    use crate::mutable::index::{InvertedIndex, Set};
+    use crate::mutable::index::InvertedIndex;
 
     #[test]
     fn test_bloom_filter() {
@@ -215,11 +225,12 @@ mod tests {
         let mut index = SparseIndex::<usize>::new(1000);
         index.insert(0, 1);
         index.insert(1001, 1);
-        let mut result = Set::Universe;
-        index.lookup(&1, &mut result);
+        index.insert(2001, 2);
+        let mut result = Bitmap::from_range(0..=2001);
+        index.lookup(&1, |set| result.and_inplace(set));
         let mut expect = Bitmap::create();
         expect.add_range(0..2000);
-        assert!(result == Set::Some(expect));
+        assert_eq!(result, expect);
     }
 
     #[test]
@@ -227,12 +238,12 @@ mod tests {
         let mut index = InvertedIndex::<usize>::new();
         index.insert(0, 1);
         index.insert(1001, 1);
-        let mut result = Set::Universe;
-        index.lookup(&1, &mut result);
+        let mut result = Bitmap::from_range(0..=1001);
+        index.lookup(&1, |set| result.and_inplace(set));
         let mut expect = Bitmap::create();
         expect.add(0);
         expect.add(1001);
-        assert!(result == Set::Some(expect));
+        assert_eq!(result, expect);
     }
 
     #[test]
@@ -243,11 +254,11 @@ mod tests {
         index_1.insert(1, 1);
         index_2.insert(0, 1);
         index_2.insert(1, 1);
-        let mut result = Set::Universe;
-        index_1.lookup(&1, &mut result);
-        index_2.lookup(&1, &mut result);
+        let mut result = Bitmap::from_range(0..=4);
+        index_1.lookup(&1, |set| result.and_inplace(set));
+        index_2.lookup(&1, |set| result.and_inplace(set));
         let mut b = Bitmap::create();
         b.add(1);
-        assert!(result == Set::Some(b));
+        assert_eq!(result, b);
     }
 }
