@@ -1,7 +1,7 @@
 #![feature(impl_trait_in_assoc_type)]
 #![feature(async_fn_in_trait)]
 
-use std::future::Future;
+use std::{error::Error, future::Future};
 
 pub enum Step<T> {
     NotYet,
@@ -10,12 +10,13 @@ pub enum Step<T> {
 }
 
 pub trait Stream {
+    type Error: Error;
     type Output<'s>
     where
         Self: 's;
-    type NextFut<'s>: Future<Output = Step<Self::Output<'s>>>
+    type NextFut<'s>: 's + Future<Output = Result<Step<Self::Output<'s>>, Self::Error>>
     where
         Self: 's;
 
-    fn next(&self) -> Self::NextFut<'_>;
+    fn next(&mut self) -> Self::NextFut<'_>;
 }

@@ -35,7 +35,7 @@ impl<'a, A: Array> Iterator for ArrayIterator<'a, A> {
 }
 
 pub trait Array: 'static + Sized {
-    type Item: for<'a> Scalar<Ref<'a> = Self::ItemRef<'a>>;
+    type Item: for<'a> Scalar<Ref<'a> = Self::ItemRef<'a>, RefMut<'a> = Self::ItemRefMut<'a>>;
     type ItemRef<'a>: ScalarRef<'a, Owned = Self::Item>
     where
         Self: 'a;

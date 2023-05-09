@@ -22,7 +22,13 @@ impl ChunkMeta {
 
 #[derive(Debug)]
 pub struct MutableChunk {
-    pub label: Vec<LabelImpl>,
-    pub field: Vec<FieldImpl>,
+    pub labels: Vec<LabelImpl>,
+    pub fields: Vec<FieldImpl>,
     pub meta: ChunkMeta,
+}
+
+#[derive(Debug)]
+pub struct Morsel<'morsel> {
+    pub label: Vec<&'morsel LabelImpl>,
+    pub field: Vec<&'morsel FieldImpl>,
 }

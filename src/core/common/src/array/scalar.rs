@@ -1,6 +1,11 @@
 use super::bitmap::{Bitmap, BitmapRef, BitmapRefMut};
 use crate::primitive::Primitive;
 
+pub enum MaybeRef<'r, S: Scalar> {
+    Owned(S),
+    Ref(S::Ref<'r>),
+}
+
 pub trait Scalar: 'static + Clone + Sized {
     type Ref<'a>: ScalarRef<'a>
     where
@@ -12,8 +17,10 @@ pub trait Scalar: 'static + Clone + Sized {
     fn as_ref(&self) -> Self::Ref<'_>;
 }
 
-pub trait ScalarRef<'a> {
+pub trait ScalarRef<'a>: Clone {
     type Owned: Scalar;
+
+    fn to_owned(self) -> Self::Owned;
 }
 
 pub trait ScalarRefMut<'a> {
@@ -49,14 +56,26 @@ impl<S: Scalar> Scalar for Option<S> {
 
 impl<'a, P: Primitive> ScalarRef<'a> for &'a P {
     type Owned = P;
+
+    fn to_owned(self) -> Self::Owned {
+        *self
+    }
 }
 
 impl<'a, P: Primitive> ScalarRef<'a> for &'a [P] {
     type Owned = Vec<P>;
+
+    fn to_owned(self) -> Self::Owned {
+        Vec::from(self)
+    }
 }
 
 impl<'a, S: ScalarRef<'a>> ScalarRef<'a> for Option<S> {
     type Owned = Option<S::Owned>;
+
+    fn to_owned(self) -> Self::Owned {
+        self.map(ScalarRef::to_owned)
+    }
 }
 
 impl<'a, P: Primitive> ScalarRefMut<'a> for &'a mut P {
@@ -108,6 +127,15 @@ impl<P: Primitive> From<Vec<Option<P>>> for NullableFixedSizedList<P> {
 pub struct NullableFixedSizeListRef<'a, P: Primitive> {
     pub(crate) validity: BitmapRef<'a>,
     pub(crate) data: &'a [P],
+}
+
+impl<P: Primitive> Clone for NullableFixedSizeListRef<'_, P> {
+    fn clone(&self) -> Self {
+        Self {
+            validity: self.validity.clone(),
+            data: self.data,
+        }
+    }
 }
 
 impl<'a, P: Primitive> NullableFixedSizeListRef<'a, P> {
@@ -170,6 +198,13 @@ impl<P: Primitive> Scalar for NullableFixedSizedList<P> {
 
 impl<'a, P: Primitive> ScalarRef<'a> for NullableFixedSizeListRef<'a, P> {
     type Owned = NullableFixedSizedList<P>;
+
+    fn to_owned(self) -> Self::Owned {
+        NullableFixedSizedList {
+            data: ToOwned::to_owned(self.data),
+            validity: self.validity.to_owned(),
+        }
+    }
 }
 
 impl<'a, P: Primitive> ScalarRefMut<'a> for NullableFixedSizeListRefMut<'a, P> {
@@ -192,6 +227,10 @@ impl<P: Primitive, const SIZE: usize> Scalar for [P; SIZE] {
 
 impl<'a, P: Primitive, const SIZE: usize> ScalarRef<'a> for &'a [P; SIZE] {
     type Owned = [P; SIZE];
+
+    fn to_owned(self) -> Self::Owned {
+        *self
+    }
 }
 
 impl<'a, P: Primitive, const SIZE: usize> ScalarRefMut<'a> for &'a mut [P; SIZE] {

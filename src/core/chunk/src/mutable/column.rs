@@ -1,7 +1,8 @@
-use std::hash::Hash;
+use std::{hash::Hash, ops::Generator};
 
 use common::{
     array::{
+        scalar::{MaybeRef, Scalar},
         Array, ConstFixedSizedListArray, IdArray, ListArray, NullableFixedSizedListArray,
         PrimitiveArray,
     },
@@ -32,12 +33,12 @@ pub type IPv6Label = ConstFixedSizedListArray<u8, 16>;
 pub type IntLabel = PrimitiveArray<i64>;
 pub type BoolLabel = PrimitiveArray<bool>;
 
-pub trait IntoStr {
-    fn into_str(&self) -> &str;
+pub trait AsStr {
+    fn as_str(&self) -> &str;
 }
 
-impl IntoStr for &[u8] {
-    fn into_str(&self) -> &str {
+impl AsStr for &[u8] {
+    fn as_str(&self) -> &str {
         std::str::from_utf8(self).unwrap()
     }
 }
@@ -58,7 +59,7 @@ impl<A: Array + Default> LabelColumn<A> {
 }
 
 #[derive(Debug, Error)]
-pub enum LookupError {
+pub enum FilterError {
     #[error("regex match only supports string label")]
     RegexStringOnly,
     #[error("regex pattern error: {}", source)]
@@ -87,30 +88,43 @@ where
 impl<A: Array> LabelColumn<A>
 where
     for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>>,
-    for<'a> A::ItemRef<'a>: Hash + IntoStr,
+    for<'a> A::ItemRef<'a>: Hash + AsStr,
 {
-    fn regex_match(
-        &self,
+    fn regex_match<'s>(
+        &'s self,
         should_match: bool,
         pattern: &str,
-        superset: &mut Bitmap,
-    ) -> Result<(), LookupError> {
+        superset: &'s mut Bitmap,
+    ) -> Result<impl 's + Generator<(), Yield = (), Return = ()>, FilterError> {
         let regex = Regex::new(pattern)?;
-        let set = self
+        let mut iter = self
             .array
             .iter()
             .enumerate()
-            .filter(|(_, item)| {
+            .filter(move |(_, item)| {
                 if let Some(item) = item {
-                    !(should_match ^ regex.is_match(item.into_str()))
+                    !(should_match ^ regex.is_match(item.as_str()))
                 } else {
                     false
                 }
             })
-            .map(|(id, _)| id as u32)
-            .collect();
-        superset.and_inplace(&set);
-        Ok(())
+            .map(|(id, _)| id as u32);
+
+        Ok(move || {
+            let mut set: Bitmap = Bitmap::create();
+            loop {
+                match iter.next() {
+                    Some(row_id) => {
+                        set.add(row_id);
+                        yield;
+                    }
+                    None => {
+                        superset.and_inplace(&set);
+                        return;
+                    }
+                }
+            }
+        })
     }
 }
 
@@ -119,15 +133,18 @@ where
     for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>>,
     for<'a> A::ItemRef<'a>: Hash,
 {
-    fn lookup<'s: 'value, 'value>(
+    fn lookup<'s>(
         &'s self,
         should_equal: bool,
-        value: Option<A::ItemRef<'value>>,
-        superset: &mut Bitmap,
-    ) {
+        value: Option<MaybeRef<'s, A::Item>>,
+        superset: &'s mut Bitmap,
+    ) -> impl 's + Generator<(), Yield = (), Return = ()> {
         let id = value
             .as_ref()
-            .map(|v| self.array.lookup_id(v))
+            .map(|v| match v {
+                MaybeRef::Owned(v) => self.array.lookup_id(&v.as_ref()),
+                MaybeRef::Ref(v) => self.array.lookup_id(v),
+            })
             .unwrap_or(Some(0));
         match id {
             Some(id) => self.index.lookup(&id, |set| {
@@ -140,13 +157,40 @@ where
             None => superset.clear(),
         }
 
-        if !self.index.exactly() {
-            *superset = superset
-                .iter()
-                .filter(|item| {
-                    !(should_equal ^ (self.array.get_unchecked(*item as usize) == value))
-                })
-                .collect()
+        move || {
+            if !self.index.exactly() {
+                let mut iter = superset.iter().filter(move |row_id| {
+                    let item = self.array.get_unchecked(*row_id as usize);
+                    match item {
+                        Some(item) => match &value {
+                            Some(value) => match value {
+                                MaybeRef::Owned(value) => {
+                                    !(should_equal ^ (item == value.as_ref()))
+                                }
+                                MaybeRef::Ref(value) => !(should_equal ^ (item == *value)),
+                            },
+                            None => false,
+                        },
+                        None => match value {
+                            Some(_) => false,
+                            None => true,
+                        },
+                    }
+                });
+                let mut set = Bitmap::create();
+                loop {
+                    match iter.next() {
+                        Some(row_id) => {
+                            set.add(row_id);
+                            yield;
+                        }
+                        None => {
+                            *superset = set;
+                            return;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -194,15 +238,19 @@ impl LabelImpl {
         Self(label)
     }
 
-    pub fn lookup(&self, matcher: MatcherOp, superset: &mut Bitmap) -> Result<(), LookupError> {
+    pub fn filter<'s>(
+        &'s self,
+        matcher: &'s MatcherOp,
+        superset: &'s mut Bitmap,
+    ) -> Result<Box<dyn 's + Generator<(), Yield = (), Return = ()> + Unpin>, FilterError> {
         match &self.0 {
-            Label::String(column) => match &matcher {
+            Label::String(column) => match matcher {
                 op @ (MatcherOp::LiteralEqual(matcher) | MatcherOp::LiteralNotEqual(matcher)) => {
                     let matcher = match matcher {
                         Some(matcher) => match matcher {
                             Label::String(s) => Some(s.as_ref()),
                             m @ _ => {
-                                return Err(LookupError::MismatchType {
+                                return Err(FilterError::MismatchType {
                                     expect: self.0.r#type(),
                                     found: m.r#type(),
                                 });
@@ -210,19 +258,23 @@ impl LabelImpl {
                         },
                         None => None,
                     };
-                    Ok(column.lookup(op.positive(), matcher, superset))
+                    Ok(Box::new(column.lookup(
+                        op.positive(),
+                        matcher.map(MaybeRef::Ref),
+                        superset,
+                    )))
                 }
-                op @ (MatcherOp::RegexMatch(matcher) | MatcherOp::RegexNotMatch(matcher)) => {
-                    column.regex_match(op.positive(), &matcher, superset)
-                }
+                op @ (MatcherOp::RegexMatch(matcher) | MatcherOp::RegexNotMatch(matcher)) => column
+                    .regex_match(op.positive(), matcher, superset)
+                    .map(|g| Box::new(g) as Box<_>),
             },
-            Label::IPv4(column) => match &matcher {
+            Label::IPv4(column) => match matcher {
                 op @ (MatcherOp::LiteralEqual(matcher) | MatcherOp::LiteralNotEqual(matcher)) => {
                     let matcher = match matcher {
                         Some(matcher) => match matcher {
                             Label::IPv4(s) => Some(s.octets()),
                             m @ _ => {
-                                return Err(LookupError::MismatchType {
+                                return Err(FilterError::MismatchType {
                                     expect: self.0.r#type(),
                                     found: m.r#type(),
                                 });
@@ -230,17 +282,21 @@ impl LabelImpl {
                         },
                         None => None,
                     };
-                    Ok(column.lookup(op.positive(), matcher.as_ref(), superset))
+                    Ok(Box::new(column.lookup(
+                        op.positive(),
+                        matcher.map(MaybeRef::Owned),
+                        superset,
+                    )))
                 }
-                _ => return Err(LookupError::RegexStringOnly),
+                _ => return Err(FilterError::RegexStringOnly),
             },
-            Label::IPv6(column) => match &matcher {
+            Label::IPv6(column) => match matcher {
                 op @ (MatcherOp::LiteralEqual(matcher) | MatcherOp::LiteralNotEqual(matcher)) => {
                     let matcher = match matcher {
                         Some(matcher) => match matcher {
                             Label::IPv6(s) => Some(s.octets()),
                             m @ _ => {
-                                return Err(LookupError::MismatchType {
+                                return Err(FilterError::MismatchType {
                                     expect: self.0.r#type(),
                                     found: m.r#type(),
                                 });
@@ -248,17 +304,21 @@ impl LabelImpl {
                         },
                         None => None,
                     };
-                    Ok(column.lookup(op.positive(), matcher.as_ref(), superset))
+                    Ok(Box::new(column.lookup(
+                        op.positive(),
+                        matcher.map(MaybeRef::Owned),
+                        superset,
+                    )))
                 }
-                _ => return Err(LookupError::RegexStringOnly),
+                _ => return Err(FilterError::RegexStringOnly),
             },
-            Label::Int(column) => match &matcher {
+            Label::Int(column) => match matcher {
                 op @ (MatcherOp::LiteralEqual(matcher) | MatcherOp::LiteralNotEqual(matcher)) => {
                     let matcher = match matcher {
                         Some(matcher) => match matcher {
                             Label::Int(s) => Some(*s),
                             m @ _ => {
-                                return Err(LookupError::MismatchType {
+                                return Err(FilterError::MismatchType {
                                     expect: self.0.r#type(),
                                     found: m.r#type(),
                                 });
@@ -266,17 +326,21 @@ impl LabelImpl {
                         },
                         None => None,
                     };
-                    Ok(column.lookup(op.positive(), matcher.as_ref(), superset))
+                    Ok(Box::new(column.lookup(
+                        op.positive(),
+                        matcher.map(MaybeRef::Owned),
+                        superset,
+                    )))
                 }
-                _ => return Err(LookupError::RegexStringOnly),
+                _ => return Err(FilterError::RegexStringOnly),
             },
-            Label::Bool(column) => match &matcher {
+            Label::Bool(column) => match matcher {
                 op @ (MatcherOp::LiteralEqual(matcher) | MatcherOp::LiteralNotEqual(matcher)) => {
                     let matcher = match matcher {
                         Some(matcher) => match matcher {
                             Label::Bool(s) => Some(*s),
                             m @ _ => {
-                                return Err(LookupError::MismatchType {
+                                return Err(FilterError::MismatchType {
                                     expect: self.0.r#type(),
                                     found: m.r#type(),
                                 });
@@ -284,9 +348,13 @@ impl LabelImpl {
                         },
                         None => None,
                     };
-                    Ok(column.lookup(op.positive(), matcher.as_ref(), superset))
+                    Ok(Box::new(column.lookup(
+                        op.positive(),
+                        matcher.map(MaybeRef::Owned),
+                        superset,
+                    )))
                 }
-                _ => return Err(LookupError::RegexStringOnly),
+                _ => return Err(FilterError::RegexStringOnly),
             },
         }
     }
@@ -308,7 +376,12 @@ pub type FieldImpl = Field<
 
 #[cfg(test)]
 mod tests {
-    use common::{column::Label, expression::MatcherOp};
+    use std::{
+        ops::{Generator, GeneratorState},
+        pin::Pin,
+    };
+
+    use common::{array::scalar::MaybeRef, column::Label, expression::MatcherOp};
     use croaring::Bitmap;
 
     use super::{LabelColumn, LabelImpl, StringLabel};
@@ -329,15 +402,36 @@ mod tests {
         let column = test_string_label();
 
         let mut result = Bitmap::from_range(0..=4);
-        column.lookup(true, Some("hello".as_ref()), &mut result);
+        {
+            let mut i = column.lookup(true, Some(MaybeRef::Ref("hello".as_ref())), &mut result);
+            loop {
+                if let GeneratorState::Complete(_) = Pin::new(&mut i).resume(()) {
+                    break;
+                }
+            }
+        }
         assert_eq!(result, Bitmap::from_iter([2_u32, 4_u32]));
 
         let mut result = Bitmap::from_range(0..=4);
-        column.lookup(true, Some("universe".as_ref()), &mut result);
+        {
+            let mut i = column.lookup(true, Some(MaybeRef::Ref("universe".as_ref())), &mut result);
+            loop {
+                if let GeneratorState::Complete(_) = Pin::new(&mut i).resume(()) {
+                    break;
+                }
+            }
+        }
         assert_eq!(result, Bitmap::create());
 
         let mut result = Bitmap::from_range(0..=4);
-        column.lookup(true, None, &mut result);
+        {
+            let mut i = column.lookup(true, None, &mut result);
+            loop {
+                if let GeneratorState::Complete(_) = Pin::new(&mut i).resume(()) {
+                    break;
+                }
+            }
+        }
         assert_eq!(result, Bitmap::from_iter([1_u32]));
     }
 
@@ -346,18 +440,27 @@ mod tests {
         let column = test_string_label();
         let limpl = LabelImpl::new(Label::String(column));
         let mut superset = Bitmap::from_range(0..6);
-        limpl
-            .lookup(
-                MatcherOp::LiteralEqual(Some(Label::String("hello".into()))),
-                &mut superset,
-            )
-            .unwrap();
+        let matcher = MatcherOp::LiteralEqual(Some(Label::String("hello".into())));
+        {
+            let mut i = limpl.filter(&matcher, &mut superset).unwrap();
+            loop {
+                if let GeneratorState::Complete(_) = Pin::new(&mut i).resume(()) {
+                    break;
+                }
+            }
+        }
         assert_eq!(superset, Bitmap::from_iter([2_u32, 4_u32]));
 
         let mut superset = Bitmap::from_range(0..6);
-        limpl
-            .lookup(MatcherOp::RegexNotMatch("he\\w+?".into()), &mut superset)
-            .unwrap();
+        let matcher = MatcherOp::RegexNotMatch("he\\w+?".into());
+        {
+            let mut i = limpl.filter(&matcher, &mut superset).unwrap();
+            loop {
+                if let GeneratorState::Complete(_) = Pin::new(&mut i).resume(()) {
+                    break;
+                }
+            }
+        }
         assert_eq!(superset, Bitmap::from_iter([0_u32, 3_u32]));
     }
 }

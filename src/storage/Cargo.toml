@@ -2,9 +2,3 @@
 name = "storage"
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
-chunk = { path = "../core/chunk" }
-common = { path = "../core/common" }
-query = { path = "../core/query" }
-executor = { path = "../core/executor" }

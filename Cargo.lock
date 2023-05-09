@@ -281,14 +281,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5996294f19bd3aae0453a862ad728f60e6600695733dd5df01da90c54363a3c"
 
 [[package]]
-name = "storage"
+name = "resource"
 version = "0.1.0"
 dependencies = [
  "chunk",
  "common",
+ "croaring",
  "executor",
  "query",
+ "thiserror",
 ]
+
+[[package]]
+name = "storage"
+version = "0.1.0"
 
 [[package]]
 name = "succinct"

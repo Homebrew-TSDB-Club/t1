@@ -61,6 +61,16 @@ pub(crate) struct BitmapRef<'a> {
     align: usize,
 }
 
+impl Clone for BitmapRef<'_> {
+    fn clone(&self) -> Self {
+        Self {
+            buffer: self.buffer,
+            length: self.length,
+            align: self.align,
+        }
+    }
+}
+
 impl<'a> BitmapRef<'a> {
     #[inline]
     pub(crate) fn get_bit(&self, offset: usize) -> bool {
@@ -70,6 +80,14 @@ impl<'a> BitmapRef<'a> {
     #[inline]
     pub(crate) fn len(&self) -> usize {
         self.length
+    }
+
+    #[inline]
+    pub(crate) fn to_owned(&self) -> Bitmap {
+        Bitmap {
+            buffer: ToOwned::to_owned(self.buffer),
+            length: self.length,
+        }
     }
 }
 
