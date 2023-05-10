@@ -4,3 +4,9 @@ edition = "2021"
 
 [workspace]
 members = ["src/core/*", "src/storage"]
+
+[profile.bench]
+debug = true
+lto = "thin"
+codegen-units = 1
+opt-level = 3

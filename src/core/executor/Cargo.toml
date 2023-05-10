@@ -4,5 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-common = { path = "../common" }
-chunk = { path = "../chunk" }
+
+[dev-dependencies]
+futures = { version = "0.3" }
+criterion = { version = "0.4", features = ["async", "async_futures"] }
+
+[[bench]]
+name = "async_vs_sync"
+harness = false

@@ -85,7 +85,7 @@ where
     }
 }
 
-impl<A: Array> LabelColumn<A>
+impl<A: Array + std::fmt::Debug> LabelColumn<A>
 where
     for<'a, 'b> A::ItemRef<'a>: PartialEq<A::ItemRef<'b>>,
     for<'a> A::ItemRef<'a>: Hash + AsStr,
@@ -115,12 +115,10 @@ where
             loop {
                 match iter.next() {
                     Some(row_id) => {
-                        set.add(row_id);
-                        yield;
+                        yield set.add(row_id);
                     }
                     None => {
-                        superset.and_inplace(&set);
-                        return;
+                        return superset.and_inplace(&set);
                     }
                 }
             }
@@ -160,15 +158,9 @@ where
         move || {
             if !self.index.exactly() {
                 let mut iter = superset.iter().filter(move |row_id| {
-                    let item = self.array.get_unchecked(*row_id as usize);
-                    match item {
+                    match self.array.get_unchecked(*row_id as usize) {
                         Some(item) => match &value {
-                            Some(value) => match value {
-                                MaybeRef::Owned(value) => {
-                                    !(should_equal ^ (item == value.as_ref()))
-                                }
-                                MaybeRef::Ref(value) => !(should_equal ^ (item == *value)),
-                            },
+                            Some(value) => !(should_equal ^ (*value == item)),
                             None => false,
                         },
                         None => match value {
@@ -181,12 +173,10 @@ where
                 loop {
                     match iter.next() {
                         Some(row_id) => {
-                            set.add(row_id);
-                            yield;
+                            yield set.add(row_id);
                         }
                         None => {
-                            *superset = set;
-                            return;
+                            return *superset = set;
                         }
                     }
                 }
@@ -442,24 +432,30 @@ mod tests {
         let mut superset = Bitmap::from_range(0..6);
         let matcher = MatcherOp::LiteralEqual(Some(Label::String("hello".into())));
         {
+            let mut round = 0;
             let mut i = limpl.filter(&matcher, &mut superset).unwrap();
             loop {
+                round += 1;
                 if let GeneratorState::Complete(_) = Pin::new(&mut i).resume(()) {
                     break;
                 }
             }
+            assert_eq!(round, 1);
         }
         assert_eq!(superset, Bitmap::from_iter([2_u32, 4_u32]));
 
         let mut superset = Bitmap::from_range(0..6);
         let matcher = MatcherOp::RegexNotMatch("he\\w+?".into());
         {
+            let mut round = 0;
             let mut i = limpl.filter(&matcher, &mut superset).unwrap();
             loop {
+                round += 1;
                 if let GeneratorState::Complete(_) = Pin::new(&mut i).resume(()) {
                     break;
                 }
             }
+            assert_eq!(round, 4);
         }
         assert_eq!(superset, Bitmap::from_iter([0_u32, 3_u32]));
     }

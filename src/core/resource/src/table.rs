@@ -6,7 +6,7 @@ use common::{
     expression::MatcherOp,
 };
 use croaring::Bitmap;
-use executor::{Step, Stream};
+use executor::stream::{Iterator, Step};
 use query::Context;
 use thiserror::Error;
 
@@ -58,30 +58,30 @@ pub struct TableScan {
     limit: Option<usize>,
 }
 
-impl Stream for TableScan {
-    type Error = TableScanError;
+// impl Stream for TableScan {
+//     type Error = TableScanError;
 
-    type Output<'s> = Morsel<'s>
-    where
-        Self: 's;
+//     type Output<'s> = Morsel<'s>
+//     where
+//         Self: 's;
 
-    type NextFut<'s> = impl 's + Future<Output = Result<Step<Self::Output<'s>>, Self::Error>>
-    where
-        Self: 's;
+//     type NextFut<'s> = impl 's + Future<Output = Result<Step<Self::Output<'s>>, Self::Error>>
+//     where
+//         Self: 's;
 
-    fn next(&mut self) -> Self::NextFut<'_> {
-        async {
-            for chunk in &self.table.mutable_chunks {
-                let mut set = Bitmap::create();
-                for (label, matcher) in chunk.labels.iter().zip(self.filter.iter()) {
-                    label.filter(matcher, &mut set)?;
-                }
-                todo!();
-            }
-            todo!()
-        }
-    }
-}
+//     fn next(&mut self) -> Self::NextFut<'_> {
+//         async {
+//             for chunk in &self.table.mutable_chunks {
+//                 let mut set = Bitmap::create();
+//                 for (label, matcher) in chunk.labels.iter().zip(self.filter.iter()) {
+//                     label.filter(matcher, &mut set)?;
+//                 }
+//                 todo!();
+//             }
+//             todo!()
+//         }
+//     }
+// }
 
 // impl Source for Table {
 //     type Execution;

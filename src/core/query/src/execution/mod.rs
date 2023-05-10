@@ -1,7 +1,5 @@
 use std::{error::Error, process::Output};
 
-use executor::Stream;
-
 // use crate::Source;
 
 // pub trait Execution: Stream {
