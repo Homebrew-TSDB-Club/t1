@@ -2,11 +2,11 @@ use std::{future::Future, rc::Rc};
 
 use chunk::mutable::{column::FilterError, Morsel, MutableChunk};
 use common::{
-    column::{FieldType, LabelType},
+    column::{label::LabelType, FieldType},
     expression::MatcherOp,
 };
 use croaring::Bitmap;
-use executor::stream::{Iterator, Step};
+use executor::iter::{Iterator, Step};
 use query::Context;
 use thiserror::Error;
 

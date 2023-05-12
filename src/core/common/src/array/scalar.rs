@@ -1,23 +1,6 @@
 use super::bitmap::{Bitmap, BitmapRef, BitmapRefMut};
 use crate::primitive::Primitive;
 
-pub enum MaybeRef<'r, S: Scalar> {
-    Owned(S),
-    Ref(S::Ref<'r>),
-}
-
-impl<'s, 'rhs, S: Scalar> PartialEq<S::Ref<'rhs>> for MaybeRef<'s, S>
-where
-    for<'a, 'b> S::Ref<'a>: PartialEq<S::Ref<'b>>,
-{
-    fn eq(&self, other: &S::Ref<'rhs>) -> bool {
-        match self {
-            MaybeRef::Owned(o) => o.as_ref() == *other,
-            MaybeRef::Ref(r) => r == other,
-        }
-    }
-}
-
 pub trait Scalar: 'static + Clone + Sized {
     type Ref<'a>: ScalarRef<'a>
     where

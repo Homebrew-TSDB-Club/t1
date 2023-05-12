@@ -1,3 +1,3 @@
 #![feature(impl_trait_in_assoc_type)]
 
-pub mod stream;
+pub mod iter;

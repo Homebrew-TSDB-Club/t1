@@ -4,6 +4,8 @@ pub mod scalar;
 
 use std::{fmt::Debug, hash::Hash};
 
+use executor::iter::Step;
+
 use self::{
     bitmap::Bitmap,
     dictionary::Dictionary,
@@ -20,16 +22,16 @@ pub struct ArrayIterator<'a, A: Array> {
     pos: usize,
 }
 
-impl<'a, A: Array> Iterator for ArrayIterator<'a, A> {
+impl<'a, A: Array> executor::iter::Iterator for ArrayIterator<'a, A> {
     type Item = A::ItemRef<'a>;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Step<Self::Item> {
         if self.pos >= self.array.len() {
-            None
+            Step::Done
         } else {
             let item = self.array.get_unchecked(self.pos);
             self.pos += 1;
-            Some(item)
+            Step::Ready(item)
         }
     }
 }

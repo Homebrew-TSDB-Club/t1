@@ -94,6 +94,7 @@ version = "0.1.0"
 dependencies = [
  "common",
  "croaring",
+ "executor",
  "hashbrown 0.13.2",
  "pdatastructs",
  "regex",
@@ -153,7 +154,9 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "ahash",
+ "executor",
  "hashbrown 0.13.2",
+ "thiserror",
 ]
 
 [[package]]

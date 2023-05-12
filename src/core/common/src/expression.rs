@@ -1,4 +1,4 @@
-use crate::{column::LabelValue, time::Instant};
+use crate::{column::label::LabelValue, time::Instant};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Resource {

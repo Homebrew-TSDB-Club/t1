@@ -1,5 +1,5 @@
 use common::{
-    column::Label,
+    column::label::Label,
     expression::{
         Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Range, Resource, Scan,
     },
@@ -29,10 +29,10 @@ fn translate(expr: promql::Node) -> Result<Expression, Error> {
                 } else {
                     let op = match label.op {
                         LabelMatchOp::Eq => {
-                            MatcherOp::LiteralEqual(Some(Label::String(label.value)))
+                            MatcherOp::LiteralEqual(Some(Label::String(label.value.into())))
                         }
                         LabelMatchOp::Ne => {
-                            MatcherOp::LiteralNotEqual(Some(Label::String(label.value)))
+                            MatcherOp::LiteralNotEqual(Some(Label::String(label.value.into())))
                         }
                         LabelMatchOp::REq => MatcherOp::RegexMatch(label.value),
                         LabelMatchOp::RNe => MatcherOp::RegexNotMatch(label.value),
@@ -99,7 +99,7 @@ fn translate(expr: promql::Node) -> Result<Expression, Error> {
 #[cfg(test)]
 mod tests {
     use common::{
-        column::Label,
+        column::label::Label,
         expression::{
             Aggregate, AggregateAction, Call, Expression, Matcher, MatcherOp, Range, Resource, Scan,
         },
