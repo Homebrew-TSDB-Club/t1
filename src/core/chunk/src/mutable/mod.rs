@@ -1,6 +1,6 @@
 use common::time::{Duration, Instant};
 
-use self::column::{FieldImpl, LabelImpl};
+use crate::mutable::column::{field::FieldImpl, label::LabelImpl};
 
 pub mod column;
 pub mod index;

@@ -1,4 +1,4 @@
-use std::{future::Future, rc::Rc};
+use std::{pin::Pin, rc::Rc};
 
 use chunk::mutable::{column::FilterError, Morsel, MutableChunk};
 use common::{
@@ -58,28 +58,24 @@ pub struct TableScan {
     limit: Option<usize>,
 }
 
-// impl Stream for TableScan {
+// impl<'iter> Iterator<'iter> for TableScan {
+//     type Item = Result<Morsel<'iter>, FilterError>;
 //     type Error = TableScanError;
 
-//     type Output<'s> = Morsel<'s>
-//     where
-//         Self: 's;
-
-//     type NextFut<'s> = impl 's + Future<Output = Result<Step<Self::Output<'s>>, Self::Error>>
-//     where
-//         Self: 's;
-
-//     fn next(&mut self) -> Self::NextFut<'_> {
-//         async {
-//             for chunk in &self.table.mutable_chunks {
-//                 let mut set = Bitmap::create();
-//                 for (label, matcher) in chunk.labels.iter().zip(self.filter.iter()) {
-//                     label.filter(matcher, &mut set)?;
+//     fn next(&mut self) -> Step<Self::Item, Result<(), Self::Error>> {
+//         for chunk in &self.table.mutable_chunks {
+//             let mut set = Bitmap::create();
+//             for (label, matcher) in chunk.labels.iter().zip(self.filter.iter()) {
+//                 match label.filter(matcher, &mut set) {
+//                     Ok(mut gen) => {
+//                         let gen = Pin::new(&mut gen);
+//                     }
+//                     Err(e) => return Step::Ready(Err(e)),
 //                 }
-//                 todo!();
 //             }
-//             todo!()
+//             todo!();
 //         }
+//         todo!()
 //     }
 // }
 

@@ -2,6 +2,7 @@ pub(crate) mod bitmap;
 pub mod dictionary;
 pub mod scalar;
 
+use std::convert::Infallible;
 use std::{fmt::Debug, hash::Hash};
 
 use executor::iter::Step;
@@ -22,12 +23,14 @@ pub struct ArrayIterator<'a, A: Array> {
     pos: usize,
 }
 
-impl<'a, A: Array> executor::iter::Iterator for ArrayIterator<'a, A> {
+impl<'a, A: Array> executor::iter::Iterator<'a> for ArrayIterator<'a, A> {
     type Item = A::ItemRef<'a>;
+    type Return = ();
+    type Error = Infallible;
 
-    fn next(&mut self) -> Step<Self::Item> {
+    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
         if self.pos >= self.array.len() {
-            Step::Done
+            Step::Done(Ok(()))
         } else {
             let item = self.array.get_unchecked(self.pos);
             self.pos += 1;

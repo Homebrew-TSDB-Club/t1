@@ -1,16 +1,16 @@
 use criterion::{
     async_executor::FuturesExecutor, black_box, criterion_group, criterion_main, Criterion,
 };
-use executor::iter::{IterStream, Iterator, Step};
+use executor::iter::{Iterator, StdIter, Step};
 
-fn fusion_iter<I: executor::iter::Iterator>(mut i: I) {
+fn fusion_iter<I: for<'iter> executor::iter::Iterator<'iter>>(mut i: I) {
     loop {
         match i.next() {
             Step::NotYet => continue,
             Step::Ready(i) => {
                 black_box(i);
             }
-            Step::Done => break,
+            Step::Done(_) => break,
         }
     }
 }
@@ -46,7 +46,7 @@ fn iterator(c: &mut Criterion) {
     c.bench_function("fusion", |b| {
         b.iter(|| {
             fusion_iter(black_box(
-                IterStream::from((0..4096).into_iter())
+                StdIter::from((0..4096).into_iter())
                     .filter(|x| *x % 2 == 0)
                     .map(|x| x + 1),
             ))

@@ -1,25 +1,28 @@
 use super::{Iterator, Step};
 
-pub struct Filter<S, P> {
-    stream: S,
+#[derive(Debug)]
+pub struct Filter<I, P> {
+    stream: I,
     predicate: P,
 }
 
-impl<S, P> Filter<S, P> {
-    pub(crate) fn new(stream: S, predicate: P) -> Self {
+impl<I, P> Filter<I, P> {
+    pub(crate) fn new(stream: I, predicate: P) -> Self {
         Self { stream, predicate }
     }
 }
 
-impl<S, P> Iterator for Filter<S, P>
+impl<'iter, I, P> Iterator<'iter> for Filter<I, P>
 where
-    S: Iterator,
-    P: FnMut(&S::Item) -> bool,
+    I: Iterator<'iter>,
+    P: FnMut(&I::Item) -> bool,
 {
-    type Item = S::Item;
+    type Item = I::Item;
+    type Return = I::Return;
+    type Error = I::Error;
 
     #[inline]
-    fn next(&mut self) -> Step<Self::Item> {
+    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
         match self.stream.next() {
             Step::Ready(item) => {
                 if (self.predicate)(&item) {

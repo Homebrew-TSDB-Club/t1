@@ -11,14 +11,16 @@ impl<I> Enumerate<I> {
     }
 }
 
-impl<I> Iterator for Enumerate<I>
+impl<'iter, I> Iterator<'iter> for Enumerate<I>
 where
-    I: Iterator,
+    I: Iterator<'iter>,
 {
     type Item = (usize, I::Item);
+    type Return = I::Return;
+    type Error = I::Error;
 
     #[inline]
-    fn next(&mut self) -> Step<Self::Item> {
+    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
         match self.iter.next() {
             Step::Ready(item) => {
                 let item = Step::Ready((self.count, item));
@@ -26,7 +28,7 @@ where
                 item
             }
             Step::NotYet => Step::NotYet,
-            Step::Done => Step::Done,
+            Step::Done(done) => Step::Done(done),
         }
     }
 }

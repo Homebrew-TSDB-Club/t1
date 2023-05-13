@@ -1,20 +1,26 @@
+pub mod and_then;
 pub mod enumerate;
 pub mod filter;
+pub mod fold;
 pub mod map;
 
-use self::{enumerate::Enumerate, filter::Filter, map::Map};
+use std::convert::Infallible;
+
+use self::{and_then::AndThen, enumerate::Enumerate, filter::Filter, fold::Fold, map::Map};
 
 #[derive(Debug)]
-pub enum Step<T> {
+pub enum Step<R, D> {
     NotYet,
-    Ready(T),
-    Done,
+    Ready(R),
+    Done(D),
 }
 
-pub trait Iterator: Sized {
-    type Item;
+pub trait Iterator<'iter>: Sized {
+    type Item: 'iter;
+    type Return;
+    type Error: std::error::Error;
 
-    fn next(&mut self) -> Step<Self::Item>;
+    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>>;
 
     #[inline]
     fn filter<P>(self, predicate: P) -> Filter<Self, P>
@@ -33,15 +39,30 @@ pub trait Iterator: Sized {
     }
 
     #[inline]
-    fn enumerate(self) -> Enumerate<Self>
-where {
+    fn enumerate(self) -> Enumerate<Self> {
         Enumerate::new(self)
+    }
+
+    #[inline]
+    fn fold<B, F>(self, accum: B, f: F) -> Fold<Self, F, B>
+    where
+        F: FnMut(&mut B, Self::Item),
+    {
+        Fold::new(self, accum, f)
+    }
+
+    #[inline]
+    fn and_then<B, F>(self, f: F) -> AndThen<Self, F, B>
+    where
+        F: FnMut(Self::Return) -> B,
+    {
+        AndThen::new(self, f)
     }
 
     #[inline]
     fn eq<I>(mut self, mut another: I) -> bool
     where
-        I: Iterator<Item = Self::Item>,
+        I: Iterator<'iter, Item = Self::Item>,
         Self::Item: PartialEq,
     {
         loop {
@@ -55,11 +76,11 @@ where {
                                 return false;
                             }
                         }
-                        Step::Done => return false,
+                        Step::Done(_) => return false,
                     }
                 },
-                Step::Done => {
-                    if let Step::Done = another.next() {
+                Step::Done(_) => {
+                    if let Step::Done(_) = another.next() {
                         return true;
                     } else {
                         return false;
@@ -70,45 +91,47 @@ where {
     }
 }
 
-pub struct IterStream<I> {
+pub struct StdIter<I> {
     iter: I,
 }
 
-impl<I: std::iter::Iterator> From<I> for IterStream<I> {
+impl<I: std::iter::Iterator> From<I> for StdIter<I> {
     #[inline]
     fn from(value: I) -> Self {
         Self { iter: value }
     }
 }
 
-impl<I: std::iter::Iterator> Iterator for IterStream<I> {
+impl<'iter, I: 'iter + std::iter::Iterator> Iterator<'iter> for StdIter<I> {
     type Item = I::Item;
+    type Return = ();
+    type Error = Infallible;
 
     #[inline]
-    fn next(&mut self) -> Step<Self::Item> {
+    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
         match self.iter.next() {
             Some(item) => Step::Ready(item),
-            None => Step::Done,
+            None => Step::Done(Ok(())),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{IterStream, Iterator};
+    use super::{Iterator, StdIter};
     use crate::iter::Step;
 
     #[test]
     fn from_iter() {
         let v = vec![0, 1, 2, 3];
-        let mut stream = IterStream::from(v.iter())
+        let mut stream = StdIter::from(v.iter())
             .filter(|item| *item % 2 == 0)
             .map(|item| *item + 1);
         let mut round = 0;
         loop {
             round += 1;
             match stream.next() {
-                Step::Done => break,
+                Step::Done(_) => break,
                 Step::Ready(i) => {
                     let _ = i;
                 }

@@ -1,5 +1,6 @@
 use super::{Iterator, Step};
 
+#[derive(Debug)]
 pub struct Map<S, F> {
     stream: S,
     f: F,
@@ -11,19 +12,22 @@ impl<S, F> Map<S, F> {
     }
 }
 
-impl<S, F, B> Iterator for Map<S, F>
+impl<'iter, I, F, B> Iterator<'iter> for Map<I, F>
 where
-    S: Iterator,
-    F: FnMut(S::Item) -> B,
+    I: Iterator<'iter>,
+    F: FnMut(I::Item) -> B,
+    B: 'iter,
 {
     type Item = B;
+    type Return = I::Return;
+    type Error = I::Error;
 
     #[inline]
-    fn next(&mut self) -> Step<Self::Item> {
+    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
         match self.stream.next() {
             Step::Ready(item) => Step::Ready((self.f)(item)),
             Step::NotYet => Step::NotYet,
-            Step::Done => Step::Done,
+            Step::Done(done) => Step::Done(done),
         }
     }
 }
