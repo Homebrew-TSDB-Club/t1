@@ -6,7 +6,7 @@ use common::{
     expression::MatcherOp,
 };
 use croaring::Bitmap;
-use executor::iter::{Iterator, StdIter, Step};
+use executor::iter::{Iterator, IteratorFusion, Step};
 use regex::Regex;
 
 use super::FilterError;
@@ -27,6 +27,14 @@ pub type IPv4Label = ConstFixedSizedListArray<u8, 4>;
 pub type IPv6Label = ConstFixedSizedListArray<u8, 16>;
 pub type IntLabel = PrimitiveArray<i64>;
 pub type BoolLabel = PrimitiveArray<bool>;
+
+pub type Impl = Label<
+    LabelColumn<StringLabel>,
+    LabelColumn<IPv4Label>,
+    LabelColumn<IPv6Label>,
+    LabelColumn<IntLabel>,
+    LabelColumn<BoolLabel>,
+>;
 
 #[derive(Debug, Clone)]
 pub struct LabelColumn<A> {
@@ -51,7 +59,7 @@ where
     pub(crate) fn regex_match<'s>(
         &'s self,
         positive: bool,
-        pattern: &str,
+        pattern: &'s str,
         superset: &'s mut Bitmap,
     ) -> Result<impl Iterator<'s>, FilterError> {
         let regex = Regex::new(pattern)?;
@@ -127,7 +135,9 @@ where
 
         if !self.index.exactly() {
             LookupIter::Approximately {
-                iter: StdIter::from(superset.iter())
+                iter: superset
+                    .iter()
+                    .fusion()
                     .filter(
                         move |row_id| match self.array.get_unchecked(*row_id as usize) {
                             Some(item) => match &value {
@@ -155,16 +165,14 @@ where
     }
 }
 
-pub type Impl = Label<
-    LabelColumn<StringLabel>,
-    LabelColumn<IPv4Label>,
-    LabelColumn<IPv6Label>,
-    LabelColumn<IntLabel>,
-    LabelColumn<BoolLabel>,
->;
-
 #[derive(Debug)]
 pub struct LabelImpl(Impl);
+
+impl From<Impl> for LabelImpl {
+    fn from(value: Impl) -> Self {
+        Self(value)
+    }
+}
 
 #[derive(Debug)]
 pub enum FilterIter<I1, I2, I3, I4, I5, I6> {
@@ -210,12 +218,6 @@ where
                 Label::Bool(iter) => label_iter!(iter),
             },
         }
-    }
-}
-
-impl From<Impl> for LabelImpl {
-    fn from(value: Impl) -> Self {
-        Self(value)
     }
 }
 

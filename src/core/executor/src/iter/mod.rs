@@ -1,12 +1,16 @@
 pub mod and_then;
 pub mod enumerate;
 pub mod filter;
+mod flat_map;
 pub mod fold;
 pub mod map;
+mod zip;
 
 use std::convert::Infallible;
 
-use self::{and_then::AndThen, enumerate::Enumerate, filter::Filter, fold::Fold, map::Map};
+use self::{
+    and_then::AndThen, enumerate::Enumerate, filter::Filter, fold::Fold, map::Map, zip::Zip,
+};
 
 #[derive(Debug)]
 pub enum Step<R, D> {
@@ -60,6 +64,14 @@ pub trait Iterator<'iter>: Sized {
     }
 
     #[inline]
+    fn zip<'rhs, I>(self, rhs: I) -> Zip<'iter, 'rhs, Self, I>
+    where
+        I: Iterator<'rhs>,
+    {
+        Zip::new(self, rhs)
+    }
+
+    #[inline]
     fn eq<I>(mut self, mut another: I) -> bool
     where
         I: Iterator<'iter, Item = Self::Item>,
@@ -88,6 +100,34 @@ pub trait Iterator<'iter>: Sized {
                 }
             }
         }
+    }
+}
+
+impl<'iter, T> Iterator<'iter> for &mut T
+where
+    T: Iterator<'iter>,
+{
+    type Item = T::Item;
+    type Return = T::Return;
+    type Error = T::Error;
+
+    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
+        (*self).next()
+    }
+}
+
+pub trait IteratorFusion<'iter> {
+    type Iterator: Iterator<'iter>;
+
+    fn fusion(self) -> Self::Iterator;
+}
+
+impl<'iter, I: 'iter + std::iter::Iterator> IteratorFusion<'iter> for I {
+    type Iterator = StdIter<I>;
+
+    #[inline]
+    fn fusion(self) -> Self::Iterator {
+        StdIter::from(self)
     }
 }
 

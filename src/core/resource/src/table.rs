@@ -1,4 +1,4 @@
-use std::{pin::Pin, rc::Rc};
+use std::rc::Rc;
 
 use chunk::mutable::{column::FilterError, Morsel, MutableChunk};
 use common::{
@@ -6,7 +6,7 @@ use common::{
     expression::MatcherOp,
 };
 use croaring::Bitmap;
-use executor::iter::{Iterator, Step};
+use executor::iter::{Iterator, IteratorFusion, StdIter, Step};
 use query::Context;
 use thiserror::Error;
 
@@ -56,28 +56,30 @@ pub struct TableScan {
     projection: Vec<usize>,
     filter: Vec<MatcherOp>,
     limit: Option<usize>,
+
+    set: Bitmap,
 }
 
-// impl<'iter> Iterator<'iter> for TableScan {
-//     type Item = Result<Morsel<'iter>, FilterError>;
-//     type Error = TableScanError;
+impl<'iter> Iterator<'iter> for TableScan {
+    type Item = Result<Morsel<'iter>, FilterError>;
+    type Return = ();
+    type Error = TableScanError;
 
-//     fn next(&mut self) -> Step<Self::Item, Result<(), Self::Error>> {
-//         for chunk in &self.table.mutable_chunks {
-//             let mut set = Bitmap::create();
-//             for (label, matcher) in chunk.labels.iter().zip(self.filter.iter()) {
-//                 match label.filter(matcher, &mut set) {
-//                     Ok(mut gen) => {
-//                         let gen = Pin::new(&mut gen);
-//                     }
-//                     Err(e) => return Step::Ready(Err(e)),
-//                 }
-//             }
-//             todo!();
-//         }
-//         todo!()
-//     }
-// }
+    fn next(&mut self) -> Step<Self::Item, Result<(), Self::Error>> {
+        let iter = self
+            .table
+            .mutable_chunks
+            .iter()
+            .zip(self.filter.iter())
+            .fusion()
+            .fold(Bitmap::create(), |superset, (chunk, matcher)| {
+                chunk.labels.iter().fusion().map(|label| {
+                    label.filter(matcher, superset)
+                });
+            });
+        todo!()
+    }
+}
 
 // impl Source for Table {
 //     type Execution;

@@ -1,8 +1,81 @@
+#![feature(generators, generator_trait)]
+
+use std::{
+    ops::{Generator, GeneratorState},
+    pin::Pin,
+};
+
 use criterion::{
     async_executor::FuturesExecutor, black_box, criterion_group, criterion_main, Criterion,
 };
-use executor::iter::{Iterator, StdIter, Step};
+use executor::iter::{Iterator, IteratorFusion, Step};
 
+pub struct Map<G, F> {
+    stream: G,
+    f: F,
+}
+
+impl<Arg, G, F, B, T> Generator<Arg> for Map<G, F>
+where
+    G: Generator<Arg, Yield = Option<T>>,
+    F: FnMut(T) -> B,
+{
+    type Yield = Option<B>;
+    type Return = G::Return;
+
+    #[inline]
+    fn resume(
+        self: std::pin::Pin<&mut Self>,
+        arg: Arg,
+    ) -> GeneratorState<Self::Yield, Self::Return> {
+        let this = unsafe { self.get_unchecked_mut() };
+        match unsafe { Pin::new_unchecked(&mut this.stream).resume(arg) } {
+            GeneratorState::Yielded(yielded) => match yielded {
+                Some(y) => {
+                    GeneratorState::Yielded(Some((this.f)(y)))
+                },
+                None => GeneratorState::Yielded(None),
+            },
+            GeneratorState::Complete(c) => GeneratorState::Complete(c),
+        }
+    }
+}
+
+pub struct Filter<G, F> {
+    stream: G,
+    f: F,
+}
+
+impl<G, F> Generator for Filter<G, F>
+where
+    G: Generator<()>,
+    F: FnMut(&G::Yield) -> bool,
+{
+    type Yield = Option<G::Yield>;
+    type Return = G::Return;
+
+    #[inline]
+    fn resume(
+        self: std::pin::Pin<&mut Self>,
+        _arg: (),
+    ) -> GeneratorState<Self::Yield, Self::Return> {
+        let this = unsafe { self.get_unchecked_mut() };
+        loop {
+            match unsafe { Pin::new_unchecked(&mut this.stream).resume(()) } {
+                GeneratorState::Yielded(yielded) => {
+                    if (this.f)(&yielded) {
+                        return GeneratorState::Yielded(Some(yielded));
+                    } else {
+                        return GeneratorState::Yielded(None);
+                    }
+                }
+                GeneratorState::Complete(c) => return GeneratorState::Complete(c),
+            }
+        }
+    }
+}
+
+#[inline(never)]
 fn fusion_iter<I: for<'iter> executor::iter::Iterator<'iter>>(mut i: I) {
     loop {
         match i.next() {
@@ -15,6 +88,7 @@ fn fusion_iter<I: for<'iter> executor::iter::Iterator<'iter>>(mut i: I) {
     }
 }
 
+#[inline(never)]
 fn std_iter<I: std::iter::Iterator>(mut i: I) {
     loop {
         match i.next() {
@@ -26,11 +100,24 @@ fn std_iter<I: std::iter::Iterator>(mut i: I) {
     }
 }
 
-#[inline]
+#[inline(never)]
+fn generator_iter<I: Generator<Yield = Option<i32>> + Unpin>(mut i: I) {
+    loop {
+        match Pin::new(&mut i).resume(()) {
+            GeneratorState::Yielded(i) => {
+                black_box(i);
+            }
+            GeneratorState::Complete(_) => break,
+        }
+    }
+}
+
+#[inline(never)]
 async fn async_id<T>(v: T) -> T {
     v
 }
 
+#[inline(never)]
 fn sync_id<T>(v: T) -> T {
     v
 }
@@ -46,10 +133,33 @@ fn iterator(c: &mut Criterion) {
     c.bench_function("fusion", |b| {
         b.iter(|| {
             fusion_iter(black_box(
-                StdIter::from((0..4096).into_iter())
+                (0..4096)
+                    .into_iter()
+                    .fusion()
                     .filter(|x| *x % 2 == 0)
                     .map(|x| x + 1),
             ))
+        })
+    });
+    c.bench_function("generator", |b| {
+        b.iter(|| {
+            generator_iter(black_box(Map {
+                stream: Filter {
+                    stream: || {
+                        let mut i = 0;
+                        loop {
+                            if i < 4096 {
+                                yield i;
+                                i += 1;
+                            } else {
+                                return;
+                            }
+                        }
+                    },
+                    f: |x: &i32| *x % 2 == 0,
+                },
+                f: |x| x + 1,
+            }))
         })
     });
 }
