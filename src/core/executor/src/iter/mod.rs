@@ -1,19 +1,16 @@
 pub mod and_then;
 pub mod enumerate;
 pub mod filter;
-mod flat_map;
 pub mod fold;
 pub mod map;
 mod zip;
-
-use std::convert::Infallible;
 
 use self::{
     and_then::AndThen, enumerate::Enumerate, filter::Filter, fold::Fold, map::Map, zip::Zip,
 };
 
 #[derive(Debug)]
-pub enum Step<R, D> {
+pub enum Step<R, D = ()> {
     NotYet,
     Ready(R),
     Done(D),
@@ -22,9 +19,8 @@ pub enum Step<R, D> {
 pub trait Iterator<'iter>: Sized {
     type Item: 'iter;
     type Return;
-    type Error: std::error::Error;
 
-    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>>;
+    fn next(&mut self) -> Step<Self::Item, Self::Return>;
 
     #[inline]
     fn filter<P>(self, predicate: P) -> Filter<Self, P>
@@ -109,9 +105,8 @@ where
 {
     type Item = T::Item;
     type Return = T::Return;
-    type Error = T::Error;
 
-    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
+    fn next(&mut self) -> Step<Self::Item, Self::Return> {
         (*self).next()
     }
 }
@@ -145,13 +140,12 @@ impl<I: std::iter::Iterator> From<I> for StdIter<I> {
 impl<'iter, I: 'iter + std::iter::Iterator> Iterator<'iter> for StdIter<I> {
     type Item = I::Item;
     type Return = ();
-    type Error = Infallible;
 
     #[inline]
-    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
+    fn next(&mut self) -> Step<Self::Item, Self::Return> {
         match self.iter.next() {
             Some(item) => Step::Ready(item),
-            None => Step::Done(Ok(())),
+            None => Step::Done(()),
         }
     }
 }

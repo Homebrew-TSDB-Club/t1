@@ -7,8 +7,8 @@ pub type LabelValue = Label<Vec<u8>, [u8; 4], [u8; 16], i64, bool>;
 #[derive(Error, Debug)]
 #[error("mismatch type of label value, expect {}, found: {}", .expect, .found)]
 pub struct LabelTypeMismatch {
-    expect: LabelType,
-    found: LabelType,
+    pub expect: LabelType,
+    pub found: LabelType,
 }
 
 pub trait TryAsRef<T: ?Sized> {

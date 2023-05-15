@@ -20,10 +20,9 @@ where
 {
     type Item = B;
     type Return = I::Return;
-    type Error = I::Error;
 
     #[inline]
-    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
+    fn next(&mut self) -> Step<Self::Item, Self::Return> {
         match self.stream.next() {
             Step::Ready(item) => Step::Ready((self.f)(item)),
             Step::NotYet => Step::NotYet,

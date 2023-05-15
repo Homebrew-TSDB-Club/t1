@@ -1,7 +1,7 @@
 pub mod execution;
 pub mod language;
 
-use std::future::Future;
+use std::{borrow::Borrow, future::Future};
 
 use common::expression::Matcher;
 // use execution::Execution;
@@ -12,16 +12,23 @@ pub struct Context {
     session_id: Uuid,
 }
 
-// pub trait Source {
-//     type Execution: Execution;
-//     type ScanFut<'future>: 'future + Future<Output = Self::Execution>
-//     where
-//         Self: 'future;
+#[derive(Debug)]
+pub struct Projection {
+    pub label: Vec<usize>,
+    pub field: Vec<usize>,
+}
 
-//     fn scan(
-//         &self,
-//         context: &Context,
-//         projection: &[usize],
-//         filter: &[Matcher<usize>],
-//     ) -> Self::ScanFut<'_>;
-// }
+impl Projection {
+    pub fn as_ref(&self) -> ProjectionRef<'_> {
+        ProjectionRef {
+            label: &self.label[..],
+            field: &self.field[..],
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ProjectionRef<'r> {
+    pub label: &'r [usize],
+    pub field: &'r [usize],
+}

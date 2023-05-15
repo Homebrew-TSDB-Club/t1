@@ -17,10 +17,9 @@ where
 {
     type Item = (usize, I::Item);
     type Return = I::Return;
-    type Error = I::Error;
 
     #[inline]
-    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
+    fn next(&mut self) -> Step<Self::Item, Self::Return> {
         match self.iter.next() {
             Step::Ready(item) => {
                 let item = Step::Ready((self.count, item));

@@ -25,7 +25,7 @@ impl<S, IP4, IP6, I, B> Label<S, IP4, IP6, I, B> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct LabelType(pub Label<(), (), (), (), ()>);
 
 impl From<Label<(), (), (), (), ()>> for LabelType {

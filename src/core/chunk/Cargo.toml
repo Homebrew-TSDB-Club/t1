@@ -6,8 +6,10 @@ edition = "2021"
 [dependencies]
 common = { path = "../common" }
 executor = { path = "../executor" }
+query = { path = "../query" }
 croaring = "0.8"
 hashbrown = "0.13"
 pdatastructs = "0.7"
 regex = "1"
 thiserror = "1"
+paste = "1"

@@ -36,10 +36,9 @@ where
 {
     type Item = (I0::Item, I1::Item);
     type Return = Either<I0::Return, I1::Return>;
-    type Error = Either<I0::Error, I1::Error>;
 
     #[inline]
-    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
+    fn next(&mut self) -> Step<Self::Item, Self::Return> {
         match (self.i0.next(), self.i1.next()) {
             (Step::NotYet, Step::NotYet) => Step::NotYet,
             (Step::NotYet, Step::Ready(mut i1)) => {
@@ -65,14 +64,8 @@ where
                 self.buf.1.as_mut().map(|b| swap(b, &mut i1));
                 Step::Ready((i0, i1))
             }
-            (Step::Done(done), _) => match done {
-                Ok(ok) => Step::Done(Ok(Either::A(ok))),
-                Err(e) => Step::Done(Err(Either::A(e))),
-            },
-            (_, Step::Done(done)) => match done {
-                Ok(ok) => Step::Done(Ok(Either::B(ok))),
-                Err(e) => Step::Done(Err(Either::B(e))),
-            },
+            (Step::Done(done), _) => Step::Done(Either::A(done)),
+            (_, Step::Done(done)) => Step::Done(Either::B(done)),
         }
     }
 }

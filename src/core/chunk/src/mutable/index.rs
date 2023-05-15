@@ -1,51 +1,9 @@
 use std::hash::Hash;
 
+use common::expression::MatcherOp;
 use croaring::Bitmap;
 use hashbrown::HashMap;
 use pdatastructs::filters::{bloomfilter::BloomFilter, Filter};
-
-// #[derive(PartialEq, Debug)]
-// pub enum Set {
-//     Universe,
-//     Some(Bitmap),
-// }
-
-// impl Set {
-//     pub fn clear(&mut self) {
-//         match self {
-//             Set::Universe => *self = Self::Some(Bitmap::create()),
-//             Set::Some(set) => set.clear(),
-//         }
-//     }
-
-//     pub fn and_inplace(&mut self, rhs: Self) {
-//         match self {
-//             Set::Universe => match rhs {
-//                 Set::Universe => {}
-//                 Set::Some(_) => *self = rhs,
-//             },
-//             Set::Some(lhs) => match rhs {
-//                 Set::Universe => {}
-//                 Set::Some(rhs) => lhs.and_inplace(&rhs),
-//             },
-//         }
-//     }
-
-//     pub fn andnot_inplace(&mut self, rhs: Self) {
-//         match self {
-//             Set::Universe => match rhs {
-//                 Set::Universe => *self = Set::Some(Bitmap::create()),
-//                 Set::Some(_) => {
-//                     (0..self.)
-//                 }
-//             },
-//             Set::Some(lhs) => match rhs {
-//                 Set::Universe => {}
-//                 Set::Some(rhs) => lhs.andnot_inplace(&rhs),
-//             },
-//         }
-//     }
-// }
 
 pub trait Index {
     type Value;
@@ -185,6 +143,16 @@ where
             IndexType::Inverted(index) => index.insert(id as u32, v),
             IndexType::Sparse(index) => index.insert(id as u32, v),
         }
+    }
+
+    pub fn filter(&self, op: &MatcherOp, id: V, superset: &mut Bitmap) {
+        self.lookup(&id, |set| {
+            if op.positive() {
+                superset.and_inplace(set)
+            } else {
+                superset.andnot_inplace(set)
+            }
+        })
     }
 }
 

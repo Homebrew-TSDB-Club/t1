@@ -1,13 +1,18 @@
-use std::rc::Rc;
+use std::{
+    ops::{Generator, GeneratorState},
+    pin::Pin,
+    rc::Rc,
+    sync::Arc,
+};
 
-use chunk::mutable::{column::FilterError, Morsel, MutableChunk};
+use chunk::mutable::{column::FilterError, MutableChunk};
 use common::{
     column::{label::LabelType, FieldType},
     expression::MatcherOp,
 };
 use croaring::Bitmap;
-use executor::iter::{Iterator, IteratorFusion, StdIter, Step};
-use query::Context;
+use executor::iter::Step;
+use query::{Context, Projection};
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -31,13 +36,20 @@ pub struct Schema {
 #[derive(Debug)]
 pub struct Meta {
     pub mutable_chunk_num: usize,
-    pub schema: Schema,
+    pub schema: Arc<Schema>,
 }
 
 #[derive(Debug)]
 pub struct Table {
     pub meta: Meta,
     pub mutable_chunks: Vec<MutableChunk>,
+}
+
+impl Table {
+    #[inline]
+    pub fn schema(&self) -> &Arc<Schema> {
+        &self.meta.schema
+    }
 }
 
 #[derive(Error, Debug)]
@@ -48,52 +60,3 @@ pub enum TableScanError {
         source: FilterError,
     },
 }
-
-#[derive(Debug)]
-pub struct TableScan {
-    table: Rc<Table>,
-    context: Context,
-    projection: Vec<usize>,
-    filter: Vec<MatcherOp>,
-    limit: Option<usize>,
-
-    set: Bitmap,
-}
-
-impl<'iter> Iterator<'iter> for TableScan {
-    type Item = Result<Morsel<'iter>, FilterError>;
-    type Return = ();
-    type Error = TableScanError;
-
-    fn next(&mut self) -> Step<Self::Item, Result<(), Self::Error>> {
-        let iter = self
-            .table
-            .mutable_chunks
-            .iter()
-            .zip(self.filter.iter())
-            .fusion()
-            .fold(Bitmap::create(), |superset, (chunk, matcher)| {
-                chunk.labels.iter().fusion().map(|label| {
-                    label.filter(matcher, superset)
-                });
-            });
-        todo!()
-    }
-}
-
-// impl Source for Table {
-//     type Execution;
-
-//     type ScanFut<'future>
-//     where
-//         Self: 'future;
-
-//     fn scan(
-//         &self,
-//         context: &query::Context,
-//         projection: &[usize],
-//         filter: &[common::expression::Matcher<usize>],
-//     ) -> Self::ScanFut<'_> {
-//         todo!()
-//     }
-// }

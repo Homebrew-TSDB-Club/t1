@@ -24,10 +24,9 @@ where
 {
     type Item = I::Item;
     type Return = B;
-    type Error = I::Error;
 
     #[inline]
-    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
+    fn next(&mut self) -> Step<Self::Item, Self::Return> {
         let accum = self.accum.as_mut().expect("fold iterator has beed done");
         match self.iter.next() {
             Step::NotYet => Step::NotYet,
@@ -35,10 +34,7 @@ where
                 (self.f)(accum, ready);
                 Step::NotYet
             }
-            Step::Done(done) => match done {
-                Ok(_) => Step::Done(Ok(unsafe { self.accum.take().unwrap_unchecked() })),
-                Err(e) => Step::Done(Err(e)),
-            },
+            Step::Done(done) => Step::Done(unsafe { self.accum.take().unwrap_unchecked() }),
         }
     }
 }

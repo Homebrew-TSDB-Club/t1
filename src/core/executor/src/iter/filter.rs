@@ -19,10 +19,9 @@ where
 {
     type Item = I::Item;
     type Return = I::Return;
-    type Error = I::Error;
 
     #[inline]
-    fn next(&mut self) -> Step<Self::Item, Result<Self::Return, Self::Error>> {
+    fn next(&mut self) -> Step<Self::Item, Self::Return> {
         match self.stream.next() {
             Step::Ready(item) => {
                 if (self.predicate)(&item) {
