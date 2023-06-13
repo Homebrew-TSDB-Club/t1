@@ -30,7 +30,10 @@ impl Clone for AnyValue {
 impl AnyValue {
     #[inline]
     pub unsafe fn cast<T>(&self) -> &T {
-        transmute(transmute::<_, *const u8>(self as *const _).offset(8) as *const T)
+        transmute(
+            transmute::<_, *const u8>(self as *const _).offset(size_of::<usize>() as isize)
+                as *const T,
+        )
     }
 }
 

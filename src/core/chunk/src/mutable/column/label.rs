@@ -93,7 +93,7 @@ where
         let mut set = Bitmap::create();
 
         for row_id in superset.iter() {
-            if let Some(item) = self.array.get_unchecked(row_id as usize) {
+            if let Some(item) = unsafe { self.array.get_unchecked(row_id as usize) } {
                 if !(positive ^ regex.is_match(item.as_str())) {
                     set.add(row_id);
                 }
@@ -125,7 +125,7 @@ where
     ) {
         let mut set = Bitmap::create();
         for row_id in superset.iter() {
-            if !(positive ^ (self.array.get_unchecked(row_id as usize) == value)) {
+            if !(positive ^ (unsafe { self.array.get_unchecked(row_id as usize) } == value)) {
                 set.add(row_id);
             }
             try_yield!(cx);
@@ -276,10 +276,12 @@ impl LabelImpl {
                         let mut new = LabelColumn::with_capacity(len, [<$label_type Label>]::with_capacity(len));
                         for id in row_set.iter() {
                             new.push(
-                                column
+                                unsafe {
+                                    column
                                     .array
                                     .get_unchecked(id as usize)
-                                    .map(ScalarRef::to_owned),
+                                    .map(ScalarRef::to_owned)
+                                },
                             );
                         }
                         Self(Label::$label_type(new))

@@ -1,4 +1,3 @@
-pub(crate) mod bitmap;
 pub(crate) mod dictionary;
 pub mod fixed;
 pub mod id;
@@ -17,7 +16,7 @@ pub trait Array: 'static + Sized {
         Self: 'a;
 
     fn get(&self, id: usize) -> Option<Self::ItemRef<'_>>;
-    fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_>;
+    unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_>;
     fn get_mut(&mut self, id: usize) -> Option<Self::ItemRefMut<'_>>;
     fn push(&mut self, value: Self::Item);
     fn push_zero(&mut self);
@@ -50,7 +49,7 @@ impl<'a, A: Array> Iterator for ArrayIterator<'a, A> {
         if self.pos >= self.array.len() {
             None
         } else {
-            let item = self.array.get_unchecked(self.pos);
+            let item = unsafe { self.array.get_unchecked(self.pos) };
             self.pos += 1;
             Some(item)
         }
@@ -73,10 +72,10 @@ mod tests {
         let mut array = FixedListArray::new(2);
         array.push(vec![1, 2]);
         array.push(vec![3, 4]);
-        assert!(array.get(0) == Some(&[1, 2]));
-        assert!(array.get(1) == Some(&[3, 4]));
+        assert_eq!(array.get(0), Some([1, 2].as_slice()));
+        assert_eq!(array.get(1), Some([3, 4].as_slice()));
         array.push_zero();
-        assert!(array.get(2) == Some(&[Default::default(); 2]));
+        assert_eq!(array.get(2), Some([0; 2].as_slice()));
     }
 
     #[test]
@@ -84,8 +83,8 @@ mod tests {
         let mut array = ListArray::new();
         array.push(vec![1, 2]);
         array.push(vec![2, 3, 4]);
-        assert!(array.get(0) == Some(&[1, 2]));
-        assert!(array.get(1) == Some(&[2, 3, 4]));
+        assert_eq!(array.get(0), Some([1, 2].as_slice()));
+        assert_eq!(array.get(1), Some([2, 3, 4].as_slice()));
     }
 
     #[test]
@@ -93,13 +92,13 @@ mod tests {
         let mut array = NullableFixedListArray::new(2);
         array.push(NfsList::<_>::from(vec![None, Some(1)]));
         array.push(NfsList::<_>::from(vec![Some(2), Some(3)]));
-        assert!(array.get(0).unwrap().get(0) == Some(None));
-        assert!(array.get(0).unwrap().get(1) == Some(Some(&1)));
-        assert!(array.get(1).unwrap().get(0) == Some(Some(&2)));
-        assert!(array.get(1).unwrap().get(1) == Some(Some(&3)));
+        assert_eq!(array.get(0).unwrap().get(0), Some(None));
+        assert_eq!(array.get(0).unwrap().get(1), Some(Some(&1)));
+        assert_eq!(array.get(1).unwrap().get(0), Some(Some(&2)));
+        assert_eq!(array.get(1).unwrap().get(1), Some(Some(&3)));
         let mut ref_mut = array.get_mut(0).unwrap();
-        ref_mut.insert(0, Some(1));
-        assert!(array.get(0).unwrap().get(0) == Some(Some(&1)));
+        ref_mut.set(0, Some(1));
+        assert_eq!(array.get(0).unwrap().get(0), Some(Some(&1)));
     }
 
     #[test]
@@ -109,10 +108,13 @@ mod tests {
         array.push(Some(Vec::from("bar")));
         array.push(Some(Vec::from("quaz")));
         array.push(Some(Vec::from("bar")));
-        assert!(array.get(0) == Some(Some("foo".as_ref())));
-        assert!(array.get(1) == Some(Some("bar".as_ref())));
-        assert!(array.get(2) == Some(Some("quaz".as_ref())));
-        assert!(array.get(3).unwrap().unwrap().as_ptr() == array.get(1).unwrap().unwrap().as_ptr());
+        assert_eq!(array.get(0), Some(Some("foo".as_ref())));
+        assert_eq!(array.get(1), Some(Some("bar".as_ref())));
+        assert_eq!(array.get(2), Some(Some("quaz".as_ref())));
+        assert_eq!(
+            array.get(3).unwrap().unwrap().as_ptr(),
+            array.get(1).unwrap().unwrap().as_ptr()
+        );
     }
 
     #[test]
@@ -121,8 +123,8 @@ mod tests {
         array.push(1);
         array.push(2);
         array.push(3);
-        assert!(array.get(0) == Some(&1));
-        assert!(array.get(1) == Some(&2));
-        assert!(array.get(2) == Some(&3));
+        assert_eq!(array.get(0), Some(&1));
+        assert_eq!(array.get(1), Some(&2));
+        assert_eq!(array.get(2), Some(&3));
     }
 }

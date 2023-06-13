@@ -32,8 +32,8 @@ mod tests {
     #[test]
     fn test_list() {
         let list = NfsList::from(vec![None, Some(1)]);
-        assert!(list.as_ref().get(0) == Some(None));
-        assert!(list.as_ref().get(1).map(|s| s.cloned()) == Some(Some(1)));
-        assert!(list.as_ref().get(2) == None);
+        assert_eq!(list.as_ref().get(0), Some(None));
+        assert_eq!(list.as_ref().get(1).map(|s| s.cloned()), Some(Some(1)));
+        assert_eq!(list.as_ref().get(2), None);
     }
 }

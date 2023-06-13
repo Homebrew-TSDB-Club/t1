@@ -11,6 +11,7 @@ hashbrown = "0.13"
 thiserror = "1"
 futures-lite = "1"
 uuid = { version = "1", features = ["v4"] }
+bitvec = "1"
 
 [dev-dependencies]
 futures = { version = "0.3" }

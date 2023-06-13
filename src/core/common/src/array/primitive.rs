@@ -38,8 +38,8 @@ impl<P: Primitive> Array for PrimitiveArray<P> {
     }
 
     #[inline]
-    fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
-        unsafe { self.data.get_unchecked(id) }
+    unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
+        self.data.get_unchecked(id)
     }
 
     #[inline]

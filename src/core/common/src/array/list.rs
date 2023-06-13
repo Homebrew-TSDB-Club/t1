@@ -45,10 +45,10 @@ impl<P: Primitive> Array for ListArray<P> {
     }
 
     #[inline]
-    fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
+    unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
         let offset = self.offsets[id];
         let end = self.offsets[id + 1];
-        &self.data[offset..end]
+        &self.data.get_unchecked(offset..end)
     }
 
     #[inline]

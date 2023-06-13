@@ -1,4 +1,6 @@
-use super::{bitmap::Bitmap, Array};
+use bitvec::prelude::*;
+
+use super::Array;
 use crate::{
     primitive::Primitive,
     scalar::list::{NfsList, NfsSlice, NfsSliceMut},
@@ -28,13 +30,13 @@ impl<P: Primitive> FixedListArray<P> {
     }
 
     #[inline]
-    pub(crate) fn slice_raw_mut(&mut self, start: usize, end: usize) -> &mut [P] {
-        &mut self.data[start..end]
+    pub(crate) unsafe fn slice_raw_mut(&mut self, start: usize, end: usize) -> &mut [P] {
+        self.data.get_unchecked_mut(start..end)
     }
 
     #[inline]
-    pub(crate) fn slice_raw(&self, start: usize, end: usize) -> &[P] {
-        &self.data[start..end]
+    pub(crate) unsafe fn slice_raw(&self, start: usize, end: usize) -> &[P] {
+        self.data.get_unchecked(start..end)
     }
 
     #[inline]
@@ -53,12 +55,12 @@ impl<P: Primitive> Array for FixedListArray<P> {
         if id * self.list_size() > self.data.len() {
             None
         } else {
-            Some(self.get_unchecked(id))
+            Some(unsafe { self.get_unchecked(id) })
         }
     }
 
     #[inline]
-    fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
+    unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
         self.slice_raw(id * self.list_size(), (id + 1) * self.list_size())
     }
 
@@ -67,7 +69,7 @@ impl<P: Primitive> Array for FixedListArray<P> {
         if id * self.list_size() > self.data.len() {
             None
         } else {
-            Some(self.slice_raw_mut(id * self.list_size(), (id + 1) * self.list_size()))
+            Some(unsafe { self.slice_raw_mut(id * self.list_size(), (id + 1) * self.list_size()) })
         }
     }
 
@@ -122,11 +124,12 @@ impl<P: Primitive, const SIZE: usize> Array for ConstFixedListArray<P, SIZE> {
         if (id + 1) * SIZE > self.data.len() {
             return None;
         }
-        Some(self.get_unchecked(id))
+        Some(unsafe { self.get_unchecked(id) })
     }
 
-    fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
-        self.data[id * SIZE..(id + 1) * SIZE]
+    unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
+        self.data
+            .get_unchecked(id * SIZE..(id + 1) * SIZE)
             .split_array_ref::<SIZE>()
             .0
     }
@@ -158,7 +161,7 @@ impl<P: Primitive, const SIZE: usize> Array for ConstFixedListArray<P, SIZE> {
 
 #[derive(Debug, Clone)]
 pub struct NullableFixedListArray<P: Primitive> {
-    validity: Bitmap,
+    validity: BitVec,
     data: FixedListArray<P>,
 }
 
@@ -167,7 +170,7 @@ impl<P: Primitive> NullableFixedListArray<P> {
     pub fn new(list_size: u32) -> Self {
         Self {
             data: FixedListArray::<P>::new(list_size),
-            validity: Bitmap::new(),
+            validity: BitVec::new(),
         }
     }
 
@@ -175,7 +178,7 @@ impl<P: Primitive> NullableFixedListArray<P> {
     pub fn with_capacity(capacity: usize, list_size: u32) -> Self {
         Self {
             data: FixedListArray::<P>::with_capacity(capacity, list_size),
-            validity: Bitmap::new(),
+            validity: BitVec::new(),
         }
     }
 
@@ -195,17 +198,14 @@ impl<P: Primitive> Array for NullableFixedListArray<P> {
         if id * self.data.list_size() > self.data.data.len() {
             None
         } else {
-            Some(self.get_unchecked(id))
+            Some(unsafe { self.get_unchecked(id) })
         }
     }
 
     #[inline]
-    fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
-        let validity_step = (self.data.list_size() + 7) / 8 * 8;
+    unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
         NfsSlice {
-            validity: self
-                .validity
-                .slice(id * validity_step, (id + 1) * validity_step),
+            validity: &self.validity[id * self.data.list_size()..(id + 1) * self.data.list_size()],
             data: self
                 .data
                 .slice_raw(id * self.data.list_size(), (id + 1) * self.data.list_size()),
@@ -218,16 +218,15 @@ impl<P: Primitive> Array for NullableFixedListArray<P> {
             offset * self.data.list_size(),
             (offset + 1) * self.data.list_size(),
         );
-        Some(NfsSliceMut::new(
-            self.validity.slice_mut(start, end),
-            self.data.slice_raw_mut(start, end),
-        ))
+        Some(NfsSliceMut::new(&mut self.validity[start..end], unsafe {
+            self.data.slice_raw_mut(start, end)
+        }))
     }
 
     #[inline]
     fn push(&mut self, value: Self::Item) {
-        self.validity.add(value.validity.as_ref());
-        self.data.data.extend_from_slice(&value.data);
+        self.validity.extend(value.validity);
+        self.data.data.extend(value.data);
     }
 
     #[inline]

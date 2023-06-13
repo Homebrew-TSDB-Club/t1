@@ -66,7 +66,7 @@ where
     }
 
     #[inline]
-    fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
+    unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
         self.values.get_unchecked(self.data[id])
     }
 

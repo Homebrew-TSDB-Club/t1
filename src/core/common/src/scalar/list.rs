@@ -1,15 +1,14 @@
 use std::ops::Range;
 
+use bitvec::prelude::*;
+
 use super::{Scalar, ScalarMut, ScalarRef};
-use crate::{
-    array::bitmap::{Bitmap, BitmapRef, BitmapRefMut},
-    primitive::Primitive,
-};
+use crate::primitive::Primitive;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct NfsList<P: Primitive> {
     pub(crate) data: Vec<P>,
-    pub(crate) validity: Bitmap,
+    pub(crate) validity: BitVec,
 }
 
 impl<P: Primitive> NfsList<P> {
@@ -23,7 +22,6 @@ impl<P: Primitive> Scalar for NfsList<P> {
     type Ref<'a> = NfsSlice<'a, P>;
     type RefMut<'a> = NfsSliceMut<'a, P>;
 
-    #[inline]
     fn as_ref(&self) -> Self::Ref<'_> {
         NfsSlice::new(self.validity.as_ref(), &self.data[..])
     }
@@ -31,7 +29,7 @@ impl<P: Primitive> Scalar for NfsList<P> {
 
 impl<P: Primitive> From<Vec<Option<P>>> for NfsList<P> {
     fn from(raw: Vec<Option<P>>) -> Self {
-        let mut validity = Bitmap::new();
+        let mut validity = BitVec::new();
         let mut data = Vec::new();
         for item in raw {
             if let Some(item) = item {
@@ -42,14 +40,13 @@ impl<P: Primitive> From<Vec<Option<P>>> for NfsList<P> {
                 data.push(Default::default());
             }
         }
-        validity.align();
         Self { data, validity }
     }
 }
 
 #[derive(Debug, PartialEq)]
 pub struct NfsSlice<'a, P: Primitive> {
-    pub(crate) validity: BitmapRef<'a>,
+    pub(crate) validity: &'a BitSlice,
     pub(crate) data: &'a [P],
 }
 
@@ -76,15 +73,14 @@ impl<P: Primitive> Clone for NfsSlice<'_, P> {
 }
 
 impl<'a, P: Primitive> NfsSlice<'a, P> {
-    #[inline]
-    pub(crate) fn new(validity: BitmapRef<'a>, data: &'a [P]) -> Self {
+    pub(crate) fn new(validity: &'a BitSlice, data: &'a [P]) -> Self {
         Self { validity, data }
     }
 
     #[inline]
     pub fn get(&self, n: usize) -> Option<Option<&P>> {
-        if self.data.len() > n {
-            if self.validity.get_bit(n) {
+        if let Some(bit) = self.validity.get(n) {
+            if *bit {
                 Some(Some(&self.data[n]))
             } else {
                 Some(None)
@@ -97,7 +93,7 @@ impl<'a, P: Primitive> NfsSlice<'a, P> {
     #[inline]
     pub fn slice(&'a self, range: Range<usize>) -> NfsSlice<'a, P> {
         Self {
-            validity: self.validity.slice(range.start, range.end),
+            validity: &self.validity[range.clone()],
             data: &self.data[range],
         }
     }
@@ -132,7 +128,7 @@ impl<'a, P: Primitive> Iterator for NfsSliceIter<'a, P> {
 
 #[derive(Debug, PartialEq)]
 pub struct NfsSliceMut<'a, P: Primitive> {
-    pub(crate) validity: BitmapRefMut<'a>,
+    pub(crate) validity: &'a mut BitSlice,
     pub(crate) data: &'a mut [P],
 }
 
@@ -141,15 +137,14 @@ impl<'a, P: Primitive> ScalarMut<'a> for NfsSliceMut<'a, P> {
 }
 
 impl<'a, P: Primitive> NfsSliceMut<'a, P> {
-    #[inline]
-    pub(crate) fn new(validity: BitmapRefMut<'a>, data: &'a mut [P]) -> Self {
+    pub(crate) fn new(validity: &'a mut BitSlice, data: &'a mut [P]) -> Self {
         Self { validity, data }
     }
 
     #[inline]
     pub fn get(&self, n: usize) -> Option<Option<&P>> {
-        if self.validity.len() > n {
-            if self.validity.get_bit(n) {
+        if let Some(bit) = self.validity.get(n) {
+            if *bit {
                 Some(Some(&self.data[n]))
             } else {
                 Some(None)
@@ -160,8 +155,8 @@ impl<'a, P: Primitive> NfsSliceMut<'a, P> {
     }
 
     #[inline]
-    pub fn insert(&mut self, n: usize, value: Option<P>) {
-        self.validity.insert(n, value.is_some());
+    pub fn set(&mut self, n: usize, value: Option<P>) {
+        self.validity.set(n, value.is_some());
         if let Some(value) = value {
             self.data[n] = value;
         }

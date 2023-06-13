@@ -39,10 +39,9 @@ where
     #[inline]
     pub(crate) fn lookup_or_insert(&mut self, value: A::Item) -> usize {
         let hash = hash_with_state(&self.hash_state, &value.as_ref());
-        let entry = self
-            .dedup
-            .raw_entry_mut()
-            .from_hash(hash, |key| value.as_ref() == self.data.get_unchecked(*key));
+        let entry = self.dedup.raw_entry_mut().from_hash(hash, |key| {
+            value.as_ref() == unsafe { self.data.get_unchecked(*key) }
+        });
 
         return match entry {
             RawEntryMut::Occupied(entry) => *entry.into_key(),
@@ -64,7 +63,7 @@ where
         return self
             .dedup
             .raw_entry()
-            .from_hash(hash_with_state(&self.hash_state, &value), |key| {
+            .from_hash(hash_with_state(&self.hash_state, &value), |key| unsafe {
                 self.data.get_unchecked(*key) == value
             })
             .map(|(&symbol, &())| symbol + 1);
@@ -89,11 +88,11 @@ where
     }
 
     #[inline]
-    pub(crate) fn get_unchecked(&self, id: usize) -> Option<A::ItemRef<'_>> {
+    pub(crate) unsafe fn get_unchecked(&self, id: usize) -> Option<A::ItemRef<'_>> {
         if id == 0 {
             None
         } else {
-            self.data.get(id - 1)
+            Some(self.data.get_unchecked(id - 1))
         }
     }
 }
@@ -115,6 +114,6 @@ mod tests {
         let v2 = dict.get(id2);
         assert_eq!(v1, v2);
         let id = dict.lookup(&"hello, world".as_ref());
-        assert!(id == Some(1));
+        assert_eq!(id, Some(1));
     }
 }
