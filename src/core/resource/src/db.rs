@@ -65,7 +65,7 @@ pub mod tests {
     use std::sync::{Arc, RwLock};
 
     use common::{
-        column::{field::FieldType, label::LabelType},
+        column::{field::Field, label::LabelType},
         index::Index,
         schema::{self, Schema},
     };
@@ -99,7 +99,7 @@ pub mod tests {
                             },
                         ],
                         fields: vec![schema::Field {
-                            r#type: FieldType::Float64(()),
+                            r#type: Field::Float64(()).into(),
                             name: "value".into(),
                         }],
                         index: vec![Index::Inverted(())],

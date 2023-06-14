@@ -3,7 +3,7 @@ use std::error::Error;
 use common::{query::Projection, Set};
 
 use super::{scan::ScanPlanner, ExecutionImpl, Planner};
-use crate::checker::mir::Mir;
+use crate::plan::physical::Physical;
 
 #[derive(Debug)]
 pub struct Context {
@@ -23,9 +23,9 @@ impl Default for Context {
     }
 }
 
-pub fn plan(cx: &mut Context, expr: Mir) -> Result<ExecutionImpl, Box<dyn Error>> {
+pub fn plan(cx: &mut Context, expr: Physical) -> Result<ExecutionImpl, Box<dyn Error>> {
     match expr {
-        Mir::Scan(scan) => {
+        Physical::Scan(scan) => {
             cx.projection.append(scan.projection);
             Ok(ExecutionImpl::Scan(
                 ScanPlanner {
@@ -39,6 +39,9 @@ pub fn plan(cx: &mut Context, expr: Mir) -> Result<ExecutionImpl, Box<dyn Error>
                 .map_err(|e| Box::new(e) as Box<_>)?,
             ))
         }
+        Physical::Call(_) => {
+            unimplemented!()
+        }
     }
 }
 
@@ -47,7 +50,7 @@ mod tests {
     use resource::db::tests::test_db;
 
     use super::{plan, Context};
-    use crate::{checker::Checker, parser::Parser, Layer, Pass};
+    use crate::{check::Checker, parse::Parser, Layer, Pass};
 
     #[test]
     fn plan_scan() {

@@ -5,11 +5,9 @@ pub mod scan;
 use std::error::Error;
 
 use chunk::mutable::Records;
-use common::context::Context;
+use common::{context::Context, DynError};
 
 use self::scan::Scan;
-
-pub type DynError = Box<dyn 'static + Error + Send + Sync>;
 
 pub trait Planner {
     type Execution: Execution;

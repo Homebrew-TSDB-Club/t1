@@ -1,7 +1,7 @@
 use common::{
     column::{
         field::Field,
-        label::{AnyValue, Label, LabelValue},
+        label::{Label, LabelValue},
     },
     context::Context,
     query::{MatcherOp, ProjectionRef},
@@ -72,7 +72,7 @@ impl Records {
             .fields
             .iter()
             .map(|field| {
-                match field.r#type {
+                match field.r#type.as_ref() {
                     Field::UInt8(_) => Field::UInt8(UInt8Field::new(width)),
                     Field::UInt16(_) => Field::UInt16(UInt16Field::new(width)),
                     Field::UInt32(_) => Field::UInt32(UInt32Field::new(width)),
@@ -153,7 +153,7 @@ impl MutableChunk {
     unsafe fn filter_by_index(
         &self,
         row_set: &mut Bitmap,
-        matcher: &[Option<MatcherOp<AnyValue>>],
+        matcher: &[Option<MatcherOp>],
     ) -> Result<(), FilterError> {
         for ((label, matcher), index) in self
             .records
@@ -181,11 +181,10 @@ impl MutableChunk {
         Ok(())
     }
 
-    #[inline]
     async unsafe fn filter_rows(
         &self,
         cx: &mut Context,
-        matcher: &[Option<MatcherOp<AnyValue>>],
+        matcher: &[Option<MatcherOp>],
     ) -> Result<Bitmap, FilterError> {
         let mut row_set = Bitmap::from_range(0..self.records.labels[0].len() as u32);
 
@@ -207,34 +206,50 @@ impl MutableChunk {
         Ok(row_set)
     }
 
-    #[inline]
-    fn map(&self, projection: ProjectionRef<'_>, set: Bitmap, range: Range) -> Records {
+    async fn map(
+        &self,
+        cx: &mut Context,
+        projection: ProjectionRef<'_>,
+        set: Bitmap,
+        range: Range,
+    ) -> Records {
         let labels = match projection.labels {
-            Set::Universe => self
-                .records
-                .labels
-                .iter()
-                .map(|labels| labels.map(&set))
-                .collect(),
-            Set::Some(p) => p
-                .iter()
-                .map(|column_id| self.records.labels[*column_id].map(&set))
-                .collect(),
+            Set::Universe => {
+                let mut mapped = Vec::with_capacity(set.cardinality() as usize);
+                for label in self.records.labels.iter() {
+                    mapped.push(label.map(cx, &set).await);
+                }
+                mapped
+            }
+            Set::Some(predicate) => {
+                let mut mapped = Vec::with_capacity(set.cardinality() as usize);
+                for label in predicate.iter() {
+                    mapped.push(self.records.labels[*label].map(cx, &set).await);
+                }
+                mapped
+            }
         };
 
+        let range = self.trim_range(range.clone());
         let fields = match projection.fields {
-            Set::Universe => self
-                .records
-                .fields
-                .iter()
-                .map(|fields| fields.map(&set, self.trim_range(range.clone())))
-                .collect(),
-            Set::Some(p) => p
-                .iter()
-                .map(|column_id| {
-                    self.records.fields[*column_id].map(&set, self.trim_range(range.clone()))
-                })
-                .collect(),
+            Set::Universe => {
+                let mut mapped = Vec::with_capacity(set.cardinality() as usize);
+                for field in self.records.fields.iter() {
+                    mapped.push(field.map(cx, &set, range.clone()).await)
+                }
+                mapped
+            }
+            Set::Some(predicate) => {
+                let mut mapped = Vec::with_capacity(set.cardinality() as usize);
+                for field in predicate.iter() {
+                    mapped.push(
+                        self.records.fields[*field]
+                            .map(cx, &set, range.clone())
+                            .await,
+                    );
+                }
+                mapped
+            }
         };
 
         Records { labels, fields }
@@ -253,15 +268,16 @@ impl MutableChunk {
         start..end
     }
 
-    #[inline]
+    #[allow(clippy::missing_safety_doc)]
     pub async unsafe fn filter(
         &self,
         cx: &mut Context,
-        matcher: &[Option<MatcherOp<AnyValue>>],
+        matcher: &[Option<MatcherOp>],
         projection: ProjectionRef<'_>,
         range: Range,
     ) -> Result<Records, FilterError> {
-        Ok(self.map(projection, self.filter_rows(cx, matcher).await?, range))
+        let set = self.filter_rows(cx, matcher).await?;
+        Ok(self.map(cx, projection, set, range).await)
     }
 
     #[inline]
@@ -293,7 +309,7 @@ mod tests {
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     use common::{
-        column::label::{AnyValue, Label, LabelValue},
+        column::label::{Label, LabelValue},
         context::Context,
         index::Index,
         query::MatcherOp,
@@ -379,16 +395,14 @@ mod tests {
                     .filter_rows(
                         &mut cx,
                         &[
-                            Some(MatcherOp::LiteralEqual(Some(AnyValue::from(
-                                LabelValue::String(Vec::from("hello")),
+                            Some(MatcherOp::LiteralEqual(Some(LabelValue::String(
+                                Vec::from("hello"),
                             )))),
-                            Some(MatcherOp::LiteralEqual(Some(AnyValue::from(
-                                LabelValue::IPv4("127.0.0.1".parse::<Ipv4Addr>().unwrap().octets()),
+                            Some(MatcherOp::LiteralEqual(Some(LabelValue::IPv4(
+                                "127.0.0.1".parse::<Ipv4Addr>().unwrap().octets(),
                             )))),
                             None,
-                            Some(MatcherOp::LiteralEqual(Some(AnyValue::from(
-                                LabelValue::Int(1),
-                            )))),
+                            Some(MatcherOp::LiteralEqual(Some(LabelValue::Int(1)))),
                             None,
                         ],
                     )

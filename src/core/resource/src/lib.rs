@@ -1,6 +1,4 @@
 #![feature(async_fn_in_trait)]
-#![feature(impl_trait_projections)]
-#![feature(get_mut_unchecked)]
 
 pub mod db;
 pub mod table;

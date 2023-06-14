@@ -57,7 +57,7 @@ where
 {
     type Item = Option<A::Item>;
     type ItemRef<'a> = Option<A::ItemRef<'a>>;
-    type ItemRefMut<'a> = Option<A::ItemRefMut<'a>>;
+    type ItemMut<'a> = Option<A::ItemMut<'a>>;
 
     #[inline]
     fn get(&self, id: usize) -> Option<Self::ItemRef<'_>> {
@@ -71,7 +71,12 @@ where
     }
 
     #[inline]
-    fn get_mut(&mut self, id: usize) -> Option<Self::ItemRefMut<'_>> {
+    unsafe fn get_unchecked_mut(&mut self, id: usize) -> Self::ItemMut<'_> {
+        self.values.get_unchecked_mut(self.data[id])
+    }
+
+    #[inline]
+    fn get_mut(&mut self, id: usize) -> Option<Self::ItemMut<'_>> {
         let vid = self.data.get(id)?;
         self.values.get_mut(*vid)
     }

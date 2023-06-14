@@ -9,6 +9,19 @@ chunk = { path = "../chunk" }
 resource = { path = "../resource" }
 executor = { path = "../executor" }
 promql = "0.4"
-thiserror = "1"
+thiserror.workspace = true
 async-channel = "1"
-hashbrown = "0.13"
+hashbrown.workspace = true
+regex.workspace = true
+paste.workspace = true
+anyhow = "1"
+
+[dev-dependencies]
+criterion = { version = "0.4" }
+spin_on = "0.1"
+
+[[bench]]
+name = "simd"
+harness = false
+
+[target.x86_64]

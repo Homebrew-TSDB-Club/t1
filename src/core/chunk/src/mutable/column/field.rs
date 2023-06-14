@@ -1,26 +1,28 @@
 use std::ops::Range;
 
 use common::{
-    array::{fixed::NullableFixedListArray, Array, ArrayIterator},
-    column::field::{Field, FieldValue},
-    scalar::ScalarRef,
+    array::{fixed::OptionalFixedListArray, Array},
+    column::field::Field,
+    context::Context,
+    scalar::{list::OptionalFixedList, ScalarRef},
+    try_yield,
 };
 use croaring::Bitmap;
 use paste::paste;
 
-pub type UInt8Field = NullableFixedListArray<u8>;
-pub type UInt16Field = NullableFixedListArray<u16>;
-pub type UInt32Field = NullableFixedListArray<u32>;
-pub type UInt64Field = NullableFixedListArray<u64>;
-pub type Int8Field = NullableFixedListArray<i8>;
-pub type Int16Field = NullableFixedListArray<i16>;
-pub type Int32Field = NullableFixedListArray<i32>;
-pub type Int64Field = NullableFixedListArray<i64>;
-pub type Float32Field = NullableFixedListArray<f32>;
-pub type Float64Field = NullableFixedListArray<f64>;
-pub type BoolField = NullableFixedListArray<bool>;
+pub type UInt8Field = OptionalFixedListArray<u8>;
+pub type UInt16Field = OptionalFixedListArray<u16>;
+pub type UInt32Field = OptionalFixedListArray<u32>;
+pub type UInt64Field = OptionalFixedListArray<u64>;
+pub type Int8Field = OptionalFixedListArray<i8>;
+pub type Int16Field = OptionalFixedListArray<i16>;
+pub type Int32Field = OptionalFixedListArray<i32>;
+pub type Int64Field = OptionalFixedListArray<i64>;
+pub type Float32Field = OptionalFixedListArray<f32>;
+pub type Float64Field = OptionalFixedListArray<f64>;
+pub type BoolField = OptionalFixedListArray<bool>;
 
-pub type ArrayImpl = Field<
+type ArrayImpl = Field<
     UInt8Field,
     UInt16Field,
     UInt32Field,
@@ -35,6 +37,7 @@ pub type ArrayImpl = Field<
 >;
 
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct FieldImpl(ArrayImpl);
 
 impl From<ArrayImpl> for FieldImpl {
@@ -61,7 +64,7 @@ impl FieldImpl {
     }
 
     #[inline]
-    pub fn map(&self, row_set: &Bitmap, range: Range<usize>) -> Self {
+    pub async fn map(&self, cx: &mut Context, row_set: &Bitmap, range: Range<usize>) -> Self {
         macro_rules! map {
             ($($field_type:ident), *) => {
                 paste! {
@@ -72,8 +75,11 @@ impl FieldImpl {
                             row_set.cardinality() as usize,
                             column.list_size() as u32,
                         );
-                        for item in column.iter() {
+
+                        let mut iter = column.iter();
+                        while let Some(item) = iter.next() {
                             field.push(ScalarRef::to_owned(item.slice(range.clone())));
+                            try_yield!(cx);
                         }
                         Field::$field_type(field)
                     }
@@ -105,56 +111,18 @@ impl FieldImpl {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-
-    pub fn iter(&self) -> FieldIter<'_> {
-        FieldIter(match &self.0 {
-            Field::UInt8(field) => Field::UInt8(field.iter()),
-            Field::UInt16(field) => Field::UInt16(field.iter()),
-            Field::UInt32(field) => Field::UInt32(field.iter()),
-            Field::UInt64(field) => Field::UInt64(field.iter()),
-            Field::Int8(field) => Field::Int8(field.iter()),
-            Field::Int16(field) => Field::Int16(field.iter()),
-            Field::Int32(field) => Field::Int32(field.iter()),
-            Field::Int64(field) => Field::Int64(field.iter()),
-            Field::Float32(field) => Field::Float32(field.iter()),
-            Field::Float64(field) => Field::Float64(field.iter()),
-            Field::Bool(field) => Field::Bool(field.iter()),
-        })
-    }
 }
 
-pub struct FieldIter<'a>(
-    Field<
-        ArrayIterator<'a, UInt8Field>,
-        ArrayIterator<'a, UInt16Field>,
-        ArrayIterator<'a, UInt32Field>,
-        ArrayIterator<'a, UInt64Field>,
-        ArrayIterator<'a, Int8Field>,
-        ArrayIterator<'a, Int16Field>,
-        ArrayIterator<'a, Int32Field>,
-        ArrayIterator<'a, Int64Field>,
-        ArrayIterator<'a, Float32Field>,
-        ArrayIterator<'a, Float64Field>,
-        ArrayIterator<'a, BoolField>,
-    >,
-);
-
-impl<'a> Iterator for FieldIter<'a> {
-    type Item = FieldValue<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match &mut self.0 {
-            Field::UInt8(field) => field.next().map(Field::UInt8),
-            Field::UInt16(field) => field.next().map(Field::UInt16),
-            Field::UInt32(field) => field.next().map(Field::UInt32),
-            Field::UInt64(field) => field.next().map(Field::UInt64),
-            Field::Int8(field) => field.next().map(Field::Int8),
-            Field::Int16(field) => field.next().map(Field::Int16),
-            Field::Int32(field) => field.next().map(Field::Int32),
-            Field::Int64(field) => field.next().map(Field::Int64),
-            Field::Float32(field) => field.next().map(Field::Float32),
-            Field::Float64(field) => field.next().map(Field::Float64),
-            Field::Bool(field) => field.next().map(Field::Bool),
-        }
-    }
-}
+pub type FieldItemImpl = Field<
+    OptionalFixedList<u8>,
+    OptionalFixedList<u16>,
+    OptionalFixedList<u32>,
+    OptionalFixedList<u64>,
+    OptionalFixedList<i8>,
+    OptionalFixedList<i16>,
+    OptionalFixedList<i32>,
+    OptionalFixedList<i64>,
+    OptionalFixedList<f32>,
+    OptionalFixedList<f64>,
+    OptionalFixedList<bool>,
+>;

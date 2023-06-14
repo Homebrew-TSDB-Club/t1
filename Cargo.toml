@@ -10,8 +10,14 @@ members = ["src/core/*", "src/storage"]
 debug = true
 lto = "thin"
 codegen-units = 1
-opt-level = 3
 
 [profile.bench]
 inherits = "release"
 codegen-units = 16
+
+[workspace.dependencies]
+thiserror = "1"
+hashbrown = "0.13"
+uuid = { version = "1", features = ["v4"] }
+regex = "1"
+paste = "1"

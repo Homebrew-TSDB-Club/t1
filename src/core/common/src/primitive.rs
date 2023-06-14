@@ -1,5 +1,3 @@
-use crate::time::Instant;
-
 pub trait Primitive: 'static + Default + Clone + Copy + PartialEq {}
 
 macro_rules! native_type {
@@ -19,4 +17,3 @@ native_type!(i32);
 native_type!(i64);
 native_type!(f32);
 native_type!(f64);
-native_type!(Instant);

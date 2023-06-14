@@ -3,7 +3,7 @@ use bitvec::prelude::*;
 use super::Array;
 use crate::{
     primitive::Primitive,
-    scalar::list::{NfsList, NfsSlice, NfsSliceMut},
+    scalar::list::{OptionalFixedList, OptionalFixedSlice, OptionalFixedSliceMut},
 };
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,7 @@ impl<P: Primitive> FixedListArray<P> {
 impl<P: Primitive> Array for FixedListArray<P> {
     type Item = Vec<P>;
     type ItemRef<'a> = &'a [P];
-    type ItemRefMut<'a> = &'a mut [P];
+    type ItemMut<'a> = &'a mut [P];
 
     #[inline]
     fn get(&self, id: usize) -> Option<Self::ItemRef<'_>> {
@@ -65,7 +65,12 @@ impl<P: Primitive> Array for FixedListArray<P> {
     }
 
     #[inline]
-    fn get_mut(&mut self, id: usize) -> Option<Self::ItemRefMut<'_>> {
+    unsafe fn get_unchecked_mut(&mut self, id: usize) -> Self::ItemMut<'_> {
+        self.slice_raw_mut(id * self.list_size(), (id + 1) * self.list_size())
+    }
+
+    #[inline]
+    fn get_mut(&mut self, id: usize) -> Option<Self::ItemMut<'_>> {
         if id * self.list_size() > self.data.len() {
             None
         } else {
@@ -118,8 +123,9 @@ impl<P: Primitive, const SIZE: usize> ConstFixedListArray<P, SIZE> {
 impl<P: Primitive, const SIZE: usize> Array for ConstFixedListArray<P, SIZE> {
     type Item = [P; SIZE];
     type ItemRef<'a> = &'a [P; SIZE];
-    type ItemRefMut<'a> = &'a mut [P; SIZE];
+    type ItemMut<'a> = &'a mut [P; SIZE];
 
+    #[inline]
     fn get(&self, id: usize) -> Option<Self::ItemRef<'_>> {
         if (id + 1) * SIZE > self.data.len() {
             return None;
@@ -127,6 +133,7 @@ impl<P: Primitive, const SIZE: usize> Array for ConstFixedListArray<P, SIZE> {
         Some(unsafe { self.get_unchecked(id) })
     }
 
+    #[inline]
     unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
         self.data
             .get_unchecked(id * SIZE..(id + 1) * SIZE)
@@ -134,7 +141,16 @@ impl<P: Primitive, const SIZE: usize> Array for ConstFixedListArray<P, SIZE> {
             .0
     }
 
-    fn get_mut(&mut self, id: usize) -> Option<Self::ItemRefMut<'_>> {
+    #[inline]
+    unsafe fn get_unchecked_mut(&mut self, id: usize) -> Self::ItemMut<'_> {
+        self.data
+            .get_unchecked_mut(id * SIZE..(id + 1) * SIZE)
+            .split_array_mut::<SIZE>()
+            .0
+    }
+
+    #[inline]
+    fn get_mut(&mut self, id: usize) -> Option<Self::ItemMut<'_>> {
         if (id + 1) * SIZE > self.data.len() {
             return None;
         }
@@ -146,26 +162,29 @@ impl<P: Primitive, const SIZE: usize> Array for ConstFixedListArray<P, SIZE> {
         )
     }
 
+    #[inline]
     fn push(&mut self, value: Self::Item) {
         self.data.extend_from_slice(&value[..])
     }
 
+    #[inline]
     fn push_zero(&mut self) {
         self.data.extend_from_slice(&[P::default(); SIZE][..])
     }
 
+    #[inline]
     fn len(&self) -> usize {
         self.data.len() / SIZE
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct NullableFixedListArray<P: Primitive> {
+pub struct OptionalFixedListArray<P: Primitive> {
     validity: BitVec,
     data: FixedListArray<P>,
 }
 
-impl<P: Primitive> NullableFixedListArray<P> {
+impl<P: Primitive> OptionalFixedListArray<P> {
     #[inline]
     pub fn new(list_size: u32) -> Self {
         Self {
@@ -188,10 +207,10 @@ impl<P: Primitive> NullableFixedListArray<P> {
     }
 }
 
-impl<P: Primitive> Array for NullableFixedListArray<P> {
-    type Item = NfsList<P>;
-    type ItemRef<'a> = NfsSlice<'a, P>;
-    type ItemRefMut<'a> = NfsSliceMut<'a, P>;
+impl<P: Primitive> Array for OptionalFixedListArray<P> {
+    type Item = OptionalFixedList<P>;
+    type ItemRef<'a> = OptionalFixedSlice<'a, P>;
+    type ItemMut<'a> = OptionalFixedSliceMut<'a, P>;
 
     #[inline]
     fn get(&self, id: usize) -> Option<Self::ItemRef<'_>> {
@@ -204,7 +223,7 @@ impl<P: Primitive> Array for NullableFixedListArray<P> {
 
     #[inline]
     unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
-        NfsSlice {
+        OptionalFixedSlice {
             validity: &self.validity[id * self.data.list_size()..(id + 1) * self.data.list_size()],
             data: self
                 .data
@@ -213,14 +232,26 @@ impl<P: Primitive> Array for NullableFixedListArray<P> {
     }
 
     #[inline]
-    fn get_mut(&mut self, offset: usize) -> Option<Self::ItemRefMut<'_>> {
+    unsafe fn get_unchecked_mut(&mut self, id: usize) -> Self::ItemMut<'_> {
+        OptionalFixedSliceMut {
+            validity: &mut self.validity
+                [id * self.data.list_size()..(id + 1) * self.data.list_size()],
+            data: self
+                .data
+                .slice_raw_mut(id * self.data.list_size(), (id + 1) * self.data.list_size()),
+        }
+    }
+
+    #[inline]
+    fn get_mut(&mut self, offset: usize) -> Option<Self::ItemMut<'_>> {
         let (start, end) = (
             offset * self.data.list_size(),
             (offset + 1) * self.data.list_size(),
         );
-        Some(NfsSliceMut::new(&mut self.validity[start..end], unsafe {
-            self.data.slice_raw_mut(start, end)
-        }))
+        Some(OptionalFixedSliceMut::new(
+            &mut self.validity[start..end],
+            unsafe { self.data.slice_raw_mut(start, end) },
+        ))
     }
 
     #[inline]

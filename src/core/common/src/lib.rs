@@ -1,17 +1,19 @@
+#![allow(clippy::len_without_is_empty)]
 #![feature(split_array)]
+#![feature(portable_simd)]
 
 pub mod array;
 pub mod column;
 pub mod context;
+pub mod either;
 pub mod index;
 pub mod primitive;
-pub mod schema;
-pub mod time;
-pub mod uuid {
-    pub use uuid::*;
-}
 pub mod query;
 pub mod scalar;
+pub mod schema;
+pub mod time;
+
+use std::error::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Set<S> {
@@ -44,3 +46,5 @@ impl<S> Set<S> {
         }
     }
 }
+
+pub type DynError = Box<dyn 'static + Error + Send + Sync>;

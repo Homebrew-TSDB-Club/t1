@@ -35,7 +35,7 @@ impl<P: Primitive> Default for ListArray<P> {
 impl<P: Primitive> Array for ListArray<P> {
     type Item = Vec<P>;
     type ItemRef<'a> = &'a [P];
-    type ItemRefMut<'a> = &'a mut [P];
+    type ItemMut<'a> = &'a mut [P];
 
     #[inline]
     fn get(&self, id: usize) -> Option<Self::ItemRef<'_>> {
@@ -48,11 +48,18 @@ impl<P: Primitive> Array for ListArray<P> {
     unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_> {
         let offset = self.offsets[id];
         let end = self.offsets[id + 1];
-        &self.data.get_unchecked(offset..end)
+        self.data.get_unchecked(offset..end)
     }
 
     #[inline]
-    fn get_mut(&mut self, id: usize) -> Option<Self::ItemRefMut<'_>> {
+    unsafe fn get_unchecked_mut(&mut self, id: usize) -> Self::ItemMut<'_> {
+        let offset = self.offsets[id];
+        let end = self.offsets[id + 1];
+        self.data.get_unchecked_mut(offset..end)
+    }
+
+    #[inline]
+    fn get_mut(&mut self, id: usize) -> Option<Self::ItemMut<'_>> {
         let offset = self.offsets.get(id)?;
         let end = self.offsets.get(id + 1)?;
         Some(&mut self.data[*offset..*end])

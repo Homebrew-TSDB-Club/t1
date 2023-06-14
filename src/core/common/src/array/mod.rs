@@ -4,20 +4,28 @@ pub mod id;
 pub mod list;
 pub mod primitive;
 
+use std::mem::transmute;
+
 use crate::scalar::{Scalar, ScalarMut, ScalarRef};
 
 pub trait Array: 'static + Sized {
-    type Item: for<'a> Scalar<Ref<'a> = Self::ItemRef<'a>, RefMut<'a> = Self::ItemRefMut<'a>>;
-    type ItemRef<'a>: ScalarRef<'a, Owned = Self::Item>
+    type Item: for<'iter> Scalar<
+        Ref<'iter> = Self::ItemRef<'iter>,
+        Mut<'iter> = Self::ItemMut<'iter>,
+    >;
+    type ItemRef<'iter>: ScalarRef<'iter, Owned = Self::Item>
     where
-        Self: 'a;
-    type ItemRefMut<'a>: ScalarMut<'a, Owned = Self::Item>
+        Self: 'iter;
+    type ItemMut<'iter>: ScalarMut<'iter, Owned = Self::Item>
     where
-        Self: 'a;
+        Self: 'iter;
 
     fn get(&self, id: usize) -> Option<Self::ItemRef<'_>>;
+    #[allow(clippy::missing_safety_doc)]
     unsafe fn get_unchecked(&self, id: usize) -> Self::ItemRef<'_>;
-    fn get_mut(&mut self, id: usize) -> Option<Self::ItemRefMut<'_>>;
+    #[allow(clippy::missing_safety_doc)]
+    unsafe fn get_unchecked_mut(&mut self, id: usize) -> Self::ItemMut<'_>;
+    fn get_mut(&mut self, id: usize) -> Option<Self::ItemMut<'_>>;
     fn push(&mut self, value: Self::Item);
     fn push_zero(&mut self);
     fn len(&self) -> usize;
@@ -31,41 +39,67 @@ pub trait Array: 'static + Sized {
     }
 
     #[inline]
+    fn iter_mut(&mut self) -> ArrayMutIterator<'_, Self> {
+        ArrayMutIterator {
+            array: self,
+            pos: 0,
+        }
+    }
+
+    #[inline]
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
 }
 
 #[derive(Debug)]
-pub struct ArrayIterator<'a, A: Array> {
-    array: &'a A,
+pub struct ArrayIterator<'iter, A: Array> {
+    array: &'iter A,
     pos: usize,
 }
 
-impl<'a, A: Array> Iterator for ArrayIterator<'a, A> {
-    type Item = A::ItemRef<'a>;
+impl<'iter, A: Array> Iterator for ArrayIterator<'iter, A> {
+    type Item = A::ItemRef<'iter>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.pos >= self.array.len() {
-            None
-        } else {
-            let item = unsafe { self.array.get_unchecked(self.pos) };
-            self.pos += 1;
-            Some(item)
+            return None;
         }
+        let item = unsafe { self.array.get_unchecked(self.pos) };
+        self.pos += 1;
+        Some(item)
+    }
+}
+
+#[derive(Debug)]
+pub struct ArrayMutIterator<'iter, A: Array> {
+    array: &'iter mut A,
+    pos: usize,
+}
+
+impl<'iter, A: Array> Iterator for ArrayMutIterator<'iter, A> {
+    type Item = A::ItemMut<'iter>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos >= self.array.len() {
+            return None;
+        }
+        let item = unsafe { transmute(self.array.get_unchecked_mut(self.pos)) };
+        self.pos += 1;
+        Some(item)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        fixed::{FixedListArray, NullableFixedListArray},
+        fixed::{FixedListArray, OptionalFixedListArray},
         id::IdArray,
         list::ListArray,
         primitive::PrimitiveArray,
         Array,
     };
-    use crate::scalar::list::NfsList;
+    use crate::scalar::list::OptionalFixedList;
 
     #[test]
     fn test_fixed_sized_list_array() {
@@ -89,9 +123,9 @@ mod tests {
 
     #[test]
     fn test_nullable_array() {
-        let mut array = NullableFixedListArray::new(2);
-        array.push(NfsList::<_>::from(vec![None, Some(1)]));
-        array.push(NfsList::<_>::from(vec![Some(2), Some(3)]));
+        let mut array = OptionalFixedListArray::new(2);
+        array.push(OptionalFixedList::<_>::from(vec![None, Some(1)]));
+        array.push(OptionalFixedList::<_>::from(vec![Some(2), Some(3)]));
         assert_eq!(array.get(0).unwrap().get(0), Some(None));
         assert_eq!(array.get(0).unwrap().get(1), Some(Some(&1)));
         assert_eq!(array.get(1).unwrap().get(0), Some(Some(&2)));

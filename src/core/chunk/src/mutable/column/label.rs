@@ -4,7 +4,7 @@ use common::{
     array::{
         fixed::ConstFixedListArray, id::IdArray, list::ListArray, primitive::PrimitiveArray, Array,
     },
-    column::label::{AnyValue, Label, LabelType, LabelValue},
+    column::label::{Label, LabelType, LabelValue},
     context::Context,
     query::MatcherOp,
     scalar::{Scalar, ScalarRef},
@@ -34,6 +34,7 @@ pub type IntLabel = PrimitiveArray<i64>;
 pub type BoolLabel = PrimitiveArray<bool>;
 
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct LabelColumn<A> {
     array: IdArray<A>,
 }
@@ -86,15 +87,14 @@ where
         &self,
         cx: &mut Context,
         positive: bool,
-        pattern: &str,
+        pattern: &Regex,
         superset: &mut Bitmap,
     ) -> Result<(), FilterError> {
-        let regex = Regex::new(pattern)?;
         let mut set = Bitmap::create();
 
         for row_id in superset.iter() {
             if let Some(item) = unsafe { self.array.get_unchecked(row_id as usize) } {
-                if !(positive ^ regex.is_match(item.as_str())) {
+                if !(positive ^ pattern.is_match(item.as_str())) {
                     set.add(row_id);
                 }
             }
@@ -144,6 +144,7 @@ pub type ArrayImpl = Label<
 >;
 
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct LabelImpl(ArrayImpl);
 
 impl From<ArrayImpl> for LabelImpl {
@@ -181,17 +182,24 @@ impl LabelImpl {
         push!(String, IPv4, IPv6, Int, Bool)
     }
 
-    pub unsafe fn lookup_value_id_unchecked(&self, matcher: &Option<AnyValue>) -> Option<usize> {
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn lookup_value_id_unchecked(&self, matcher: &Option<LabelValue>) -> Option<usize> {
         macro_rules! lookup_value_id {
-            ($($label_type:ident), * => $op:expr, $matcher:expr) => {
+            ($($label_type:ident), * => $matcher:expr) => {
                 paste! {
                 match &self.0 {
                     $(
                     Label::$label_type(column) => {
                         $matcher
                             .as_ref()
-                            .map(|matcher| Scalar::as_ref(matcher.cast::<<[<$label_type Label>] as Array>::Item>()))
-                            .map(|v| column.array.lookup_id(&v))
+                            .map(|matcher| {
+                                let value = if let LabelValue::$label_type(value) = matcher {
+                                    value
+                                } else {
+                                    panic!("type of label value assertion failed")
+                                };
+                                column.array.lookup_id(&Scalar::as_ref(value))
+                            })
                             .unwrap_or(Some(0))
                     }
                     )*
@@ -200,7 +208,7 @@ impl LabelImpl {
             };
         }
 
-        lookup_value_id!(String, IPv4, IPv6, Int, Bool => op, matcher)
+        lookup_value_id!(String, IPv4, IPv6, Int, Bool => matcher)
     }
 
     #[inline]
@@ -223,11 +231,12 @@ impl LabelImpl {
         self.len() == 0
     }
 
+    #[allow(clippy::missing_safety_doc)]
     #[inline]
     pub async unsafe fn filter(
         &self,
         cx: &mut Context,
-        matcher: &MatcherOp<AnyValue>,
+        matcher: &MatcherOp,
         superset: &mut Bitmap,
     ) -> Result<(), FilterError> {
         macro_rules! label_lookup {
@@ -238,7 +247,14 @@ impl LabelImpl {
                     Label::$label_type(column) => {
                         let matcher = $matcher
                             .as_ref()
-                            .map(|matcher| Scalar::as_ref(matcher.cast::<<[<$label_type Label>] as Array>::Item>()));
+                            .map(|matcher| {
+                                let value = if let LabelValue::$label_type(value) = matcher {
+                                    value
+                                } else {
+                                    panic!("type of label value assertion failed")
+                                };
+                                Scalar::as_ref(value)
+                            });
                         column.lookup(cx, $op.positive(), matcher, superset).await;
                         Ok(())
                     }
@@ -265,7 +281,7 @@ impl LabelImpl {
         }
     }
 
-    pub fn map(&self, row_set: &Bitmap) -> Self {
+    pub async fn map(&self, cx: &mut Context, row_set: &Bitmap) -> Self {
         macro_rules! map {
             ($($label_type:ident), *) => {
                 paste! {
@@ -283,6 +299,7 @@ impl LabelImpl {
                                     .map(ScalarRef::to_owned)
                                 },
                             );
+                            try_yield!(cx);
                         }
                         Self(Label::$label_type(new))
                     }
@@ -300,6 +317,7 @@ mod tests {
 
     use common::context::Context;
     use croaring::Bitmap;
+    use regex::Regex;
 
     use super::{LabelColumn, StringLabel};
 
@@ -333,7 +351,7 @@ mod tests {
 
             let mut result = Bitmap::from_range(0..5);
             column
-                .regex_match(&mut cx, true, "\\w+?", &mut result)
+                .regex_match(&mut cx, true, &Regex::new("\\w+?").unwrap(), &mut result)
                 .await
                 .unwrap();
             assert_eq!(result, Bitmap::from_iter([0, 2, 3, 4]));

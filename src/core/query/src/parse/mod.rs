@@ -1,19 +1,20 @@
-pub mod hir;
 pub mod promql;
 
+use regex;
 use thiserror::Error;
 
-use self::hir::Hir;
-use crate::{Layer, Pass};
+use crate::{plan::logical::Logical, Layer, Pass};
 
 #[derive(Error, Debug)]
-pub enum Error<E: std::error::Error> {
+pub enum Error {
     #[error("parsing wrong: {}", .err)]
     ParsingWrong { err: String },
     #[error("query does not have a metric name")]
     NoName,
     #[error(transparent)]
-    UpStream(#[from] E),
+    UpStream(#[from] Box<dyn std::error::Error>),
+    #[error("invalid regex pattern: {}", .0)]
+    InvalidRegex(#[from] regex::Error),
 }
 
 #[derive(Default)]
@@ -44,10 +45,14 @@ impl<'input, Input, P> Pass<Input> for Parse<P>
 where
     P: Pass<Input, Output = &'input str>,
 {
-    type Output = Hir;
-    type Error = Error<P::Error>;
+    type Output = Logical;
+    type Error = Error;
 
     fn apply(&self, input: Input) -> Result<Self::Output, Self::Error> {
-        promql::parse(self.inner.apply(input)?)
+        promql::parse(
+            self.inner
+                .apply(input)
+                .map_err(|e| Error::UpStream(Box::new(e)))?,
+        )
     }
 }

@@ -57,42 +57,30 @@ where
         _arg: (),
     ) -> GeneratorState<Self::Yield, Self::Return> {
         let this = unsafe { self.get_unchecked_mut() };
-        loop {
-            match unsafe { Pin::new_unchecked(&mut this.stream).resume(()) } {
-                GeneratorState::Yielded(yielded) => {
-                    if (this.f)(&yielded) {
-                        return GeneratorState::Yielded(Some(yielded));
-                    } else {
-                        return GeneratorState::Yielded(None);
-                    }
+        match unsafe { Pin::new_unchecked(&mut this.stream).resume(()) } {
+            GeneratorState::Yielded(yielded) => {
+                if (this.f)(&yielded) {
+                    GeneratorState::Yielded(Some(yielded))
+                } else {
+                    GeneratorState::Yielded(None)
                 }
-                GeneratorState::Complete(c) => return GeneratorState::Complete(c),
             }
+            GeneratorState::Complete(c) => GeneratorState::Complete(c),
         }
     }
 }
 
 #[inline]
-fn std_iter<I: std::iter::Iterator>(mut i: I) {
-    loop {
-        match i.next() {
-            Some(i) => {
-                black_box(i);
-            }
-            None => break,
-        }
+fn std_iter<I: std::iter::Iterator>(i: I) {
+    for i in i {
+        black_box(i);
     }
 }
 
 #[inline]
 fn generator_iter<I: Generator<Yield = Option<i32>> + Unpin>(mut i: I) {
-    loop {
-        match Pin::new(&mut i).resume(()) {
-            GeneratorState::Yielded(i) => {
-                black_box(i);
-            }
-            GeneratorState::Complete(_) => break,
-        }
+    while let GeneratorState::Yielded(i) = Pin::new(&mut i).resume(()) {
+        black_box(i);
     }
 }
 
@@ -108,11 +96,7 @@ fn sync_id<T>(v: T) -> T {
 
 fn iterator(c: &mut Criterion) {
     c.bench_function("standard", |b| {
-        b.iter(|| {
-            std_iter(black_box(
-                (0..4096).into_iter().filter(|x| *x % 2 == 0).map(|x| x + 1),
-            ))
-        })
+        b.iter(|| std_iter(black_box((0..4096).filter(|x| *x % 2 == 0).map(|x| x + 1))))
     });
     c.bench_function("generator", |b| {
         b.iter(|| {

@@ -3,6 +3,14 @@ use common::{
     time::{Duration, Range},
 };
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum Logical {
+    Aggregate(Aggregate),
+    Call(Call),
+    Scan(Scan),
+    Literal(String),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AggregateAction {
     Without,
@@ -26,14 +34,14 @@ pub struct Aggregate {
     pub name: String,
     pub action: AggregateAction,
     pub by: Vec<String>,
-    pub args: Vec<Hir>,
+    pub args: Vec<Logical>,
     pub window: Window,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Call {
     pub name: String,
-    pub args: Vec<Hir>,
+    pub args: Vec<Logical>,
 }
 
 #[derive(Debug, Clone)]
@@ -50,14 +58,6 @@ impl PartialEq for Scan {
             && self.matcher == other.matcher
             && self.projection == other.projection
     }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Hir {
-    Aggregate(Aggregate),
-    Call(Call),
-    Scan(Scan),
-    Literal(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]

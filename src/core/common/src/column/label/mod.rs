@@ -1,8 +1,4 @@
-pub mod value;
-
 use std::fmt::Display;
-
-pub use self::value::*;
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
@@ -31,11 +27,13 @@ pub type LabelType = Label<(), (), (), (), ()>;
 impl Display for Label<(), (), (), (), ()> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Label::String(_) => f.write_str("String"),
-            Label::IPv4(_) => f.write_str("IPv4"),
-            Label::IPv6(_) => f.write_str("IPv6"),
-            Label::Int(_) => f.write_str("Int"),
-            Label::Bool(_) => f.write_str("Bool"),
+            Label::String(_) => f.write_str("string"),
+            Label::IPv4(_) => f.write_str("ipv4"),
+            Label::IPv6(_) => f.write_str("ipv6"),
+            Label::Int(_) => f.write_str("int"),
+            Label::Bool(_) => f.write_str("bool"),
         }
     }
 }
+
+pub type LabelValue = Label<Vec<u8>, [u8; 4], [u8; 16], i64, bool>;

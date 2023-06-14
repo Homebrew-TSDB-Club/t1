@@ -30,7 +30,7 @@ impl<P: Primitive> PrimitiveArray<P> {
 impl<P: Primitive> Array for PrimitiveArray<P> {
     type Item = P;
     type ItemRef<'a> = &'a P;
-    type ItemRefMut<'a> = &'a mut P;
+    type ItemMut<'a> = &'a mut P;
 
     #[inline]
     fn get(&self, id: usize) -> Option<Self::ItemRef<'_>> {
@@ -43,7 +43,12 @@ impl<P: Primitive> Array for PrimitiveArray<P> {
     }
 
     #[inline]
-    fn get_mut(&mut self, id: usize) -> Option<Self::ItemRefMut<'_>> {
+    unsafe fn get_unchecked_mut(&mut self, id: usize) -> Self::ItemMut<'_> {
+        self.data.get_unchecked_mut(id)
+    }
+
+    #[inline]
+    fn get_mut(&mut self, id: usize) -> Option<Self::ItemMut<'_>> {
         self.data.get_mut(id)
     }
 

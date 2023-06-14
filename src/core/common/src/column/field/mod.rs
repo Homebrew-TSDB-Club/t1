@@ -1,6 +1,7 @@
-use crate::scalar::list::NfsSlice;
+use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub enum Field<U8, U16, U32, U64, I8, I16, I32, I64, F32, F64, B> {
     UInt8(U8),
     UInt16(U16),
@@ -15,18 +16,45 @@ pub enum Field<U8, U16, U32, U64, I8, I16, I32, I64, F32, F64, B> {
     Bool(B),
 }
 
-pub type FieldType = Field<(), (), (), (), (), (), (), (), (), (), ()>;
+type TypeInner = Field<(), (), (), (), (), (), (), (), (), (), ()>;
 
-pub type FieldValue<'a> = Field<
-    NfsSlice<'a, u8>,
-    NfsSlice<'a, u16>,
-    NfsSlice<'a, u32>,
-    NfsSlice<'a, u64>,
-    NfsSlice<'a, i8>,
-    NfsSlice<'a, i16>,
-    NfsSlice<'a, i32>,
-    NfsSlice<'a, i64>,
-    NfsSlice<'a, f32>,
-    NfsSlice<'a, f64>,
-    NfsSlice<'a, bool>,
->;
+#[derive(Clone)]
+pub struct FieldType(TypeInner);
+
+impl From<TypeInner> for FieldType {
+    #[inline]
+    fn from(value: TypeInner) -> Self {
+        Self(value)
+    }
+}
+
+impl AsRef<TypeInner> for FieldType {
+    fn as_ref(&self) -> &TypeInner {
+        &self.0
+    }
+}
+
+impl Debug for FieldType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self.0 {
+            Field::UInt8(_) => "uint8",
+            Field::UInt16(_) => "uint16",
+            Field::UInt32(_) => "uint32",
+            Field::UInt64(_) => "uint64",
+            Field::Int8(_) => "int8",
+            Field::Int16(_) => "int16",
+            Field::Int32(_) => "int32",
+            Field::Int64(_) => "int64",
+            Field::Float32(_) => "float32",
+            Field::Float64(_) => "float64",
+            Field::Bool(_) => "bool",
+        };
+        f.write_str(s)
+    }
+}
+
+impl Display for FieldType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self, f)
+    }
+}

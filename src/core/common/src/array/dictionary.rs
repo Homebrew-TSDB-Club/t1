@@ -79,7 +79,7 @@ where
     }
 
     #[inline]
-    pub(crate) fn get_mut(&mut self, id: usize) -> Option<Option<A::ItemRefMut<'_>>> {
+    pub(crate) fn get_mut(&mut self, id: usize) -> Option<Option<A::ItemMut<'_>>> {
         if id == 0 {
             Some(None)
         } else {
@@ -93,6 +93,15 @@ where
             None
         } else {
             Some(self.data.get_unchecked(id - 1))
+        }
+    }
+
+    #[inline]
+    pub(crate) unsafe fn get_unchecked_mut(&mut self, id: usize) -> Option<A::ItemMut<'_>> {
+        if id == 0 {
+            None
+        } else {
+            Some(self.data.get_unchecked_mut(id - 1))
         }
     }
 }
@@ -113,7 +122,7 @@ mod tests {
         let v1 = dict.get(id);
         let v2 = dict.get(id2);
         assert_eq!(v1, v2);
-        let id = dict.lookup(&"hello, world".as_ref());
+        let id = dict.lookup("hello, world".as_ref());
         assert_eq!(id, Some(1));
     }
 }

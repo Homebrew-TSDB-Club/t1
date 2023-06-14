@@ -3,18 +3,16 @@ name = "common"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 ahash = "0.8"
-hashbrown = "0.13"
-thiserror = "1"
+hashbrown.workspace = true
+thiserror.workspace = true
 futures-lite = "1"
 uuid = { version = "1", features = ["v4"] }
 bitvec = "1"
+regex.workspace = true
 
 [dev-dependencies]
-futures = { version = "0.3" }
 criterion = { version = "0.4", features = ["async", "async_futures"] }
 
 [[bench]]

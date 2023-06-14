@@ -1,7 +1,6 @@
 pub mod field;
 pub mod label;
 
-use common::column::label::LabelTypeMismatch;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -12,10 +11,5 @@ pub enum FilterError {
     PatternError {
         #[from]
         source: regex::Error,
-    },
-    #[error(transparent)]
-    MismatchType {
-        #[from]
-        source: LabelTypeMismatch,
     },
 }

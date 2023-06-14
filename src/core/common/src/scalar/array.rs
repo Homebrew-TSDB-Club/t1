@@ -6,12 +6,17 @@ impl<P: Primitive, const SIZE: usize> Scalar for [P; SIZE] {
     where
         Self: 'a;
 
-    type RefMut<'a> = &'a mut [P; SIZE]
+    type Mut<'a> = &'a mut [P; SIZE]
     where
         Self: 'a;
 
     #[inline]
     fn as_ref(&self) -> Self::Ref<'_> {
+        self
+    }
+
+    #[inline]
+    fn as_mut(&mut self) -> Self::Mut<'_> {
         self
     }
 }
@@ -27,4 +32,9 @@ impl<'a, P: Primitive, const SIZE: usize> ScalarRef<'a> for &'a [P; SIZE] {
 
 impl<'a, P: Primitive, const SIZE: usize> ScalarMut<'a> for &'a mut [P; SIZE] {
     type Owned = [P; SIZE];
+
+    #[inline]
+    fn to_owned(self) -> Self::Owned {
+        ToOwned::to_owned(self)
+    }
 }

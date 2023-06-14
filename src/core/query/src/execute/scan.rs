@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use chunk::mutable::{MutableChunk, Records};
 use common::{
-    column::label::AnyValue,
     context::Context,
     query::{MatcherOp, Projection},
     time::Range,
@@ -23,7 +22,7 @@ pub enum Error {
 #[derive(Debug)]
 pub struct ScanPlanner {
     pub(crate) resource: Arc<Table>,
-    pub(crate) matcher: Vec<Option<MatcherOp<AnyValue>>>,
+    pub(crate) matcher: Vec<Option<MatcherOp>>,
     pub(crate) limit: Option<usize>,
     pub(crate) projection: Projection<usize>,
     pub(crate) range: Range,
@@ -79,7 +78,7 @@ impl Execution for Scan {
 pub struct ScanWorker<'chunks> {
     iter: std::slice::Iter<'chunks, MutableChunk>,
     projection: Projection,
-    matcher: Vec<Option<MatcherOp<AnyValue>>>,
+    matcher: Vec<Option<MatcherOp>>,
     limit: Option<usize>,
     count: usize,
     range: Range,

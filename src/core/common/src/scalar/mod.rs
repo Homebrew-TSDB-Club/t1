@@ -8,11 +8,12 @@ pub trait Scalar: 'static + Clone + Sized {
     type Ref<'a>: ScalarRef<'a>
     where
         Self: 'a;
-    type RefMut<'a>: ScalarMut<'a>
+    type Mut<'a>: ScalarMut<'a>
     where
         Self: 'a;
 
     fn as_ref(&self) -> Self::Ref<'_>;
+    fn as_mut(&mut self) -> Self::Mut<'_>;
 }
 
 pub trait ScalarRef<'a>: Clone {
@@ -23,15 +24,17 @@ pub trait ScalarRef<'a>: Clone {
 
 pub trait ScalarMut<'a> {
     type Owned: Scalar;
+
+    fn to_owned(self) -> Self::Owned;
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::scalar::{list::NfsList, Scalar};
+    use crate::scalar::{list::OptionalFixedList, Scalar};
 
     #[test]
     fn test_list() {
-        let list = NfsList::from(vec![None, Some(1)]);
+        let list = OptionalFixedList::from(vec![None, Some(1)]);
         assert_eq!(list.as_ref().get(0), Some(None));
         assert_eq!(list.as_ref().get(1).map(|s| s.cloned()), Some(Some(1)));
         assert_eq!(list.as_ref().get(2), None);
